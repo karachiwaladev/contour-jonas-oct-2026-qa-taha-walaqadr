@@ -26,35 +26,40 @@ This file is the **base index** and the only file an agent must read first. Keep
 ```
 CLAUDE.md                  <- you are here (base index)
 README.md                  <- workshop info
-.claude/settings.json      <- hooks config (Stop hook logs every prompt)
+.mcp.json                  <- Chrome DevTools MCP server (browser verification)
+.claude/settings.json      <- hooks: block destructive commands; on stop, log prompts + commit/push
 .claude/hooks/             <- hook scripts
 .claude/prompts.jsonl      <- prompt log written by the Stop hook (JSONL)
-.claude/skills/            <- factory skills (the ticket loop lives here)
-projects/<project-name>/   <- one folder per project
-  README.md                <- what the project is, status, owner
+.claude/skills/            <- factory skills (the ticket loop: factory-loop/)
+<project-name>/            <- one top-level folder per project (e.g. todo/)
+  README.md                <- what the project is, how to run it, status
   CLAUDE.md                <- optional: project-specific agent instructions
 ```
 
 ## How the factory handles a ticket
 
-1. Pick up each open issue.
-2. React 👀 so people can see it has been picked up.
-3. Do the work: answer a question in a comment, or make the change and push to `main`.
-4. Comment with what was done (link the commit), then close the issue.
-5. If a ticket is unclear or needs a human decision, leave it open with a comment saying
-   what is needed.
+The loop is `.claude/skills/factory-loop/SKILL.md`; read it for the details.
+
+1. React 👀 on each new open issue.
+2. **Questions:** answer in a comment with sources, then close.
+3. **Build work:** ask clarifying questions on the ticket → post a plan → wait for approval →
+   build → verify in Chrome DevTools (`.mcp.json`) → commit screenshots → push → comment with
+   the commit and screenshots → close.
+4. **Never destructive:** no deleting, force-pushing or rewriting history
+   (`.claude/hooks/block-destructive.py` blocks it). Anything like that goes to a human.
+5. Every turn ends with an automatic commit and push (`.claude/hooks/auto-commit-push.sh`).
 
 ## Adding a project
 
-1. Create `projects/<project-name>/` (lowercase, hyphenated).
-2. Add `projects/<project-name>/README.md` with a one-paragraph summary.
+1. Create a top-level `<project-name>/` folder (lowercase, hyphenated), unless the ticket names one.
+2. Add `<project-name>/README.md` with a one-paragraph summary and how to run it.
 3. Add a row to the index below in the same commit.
 
 ## Index
 
 | Project | Folder | Status | Summary |
 | --- | --- | --- | --- |
-| _(none yet)_ | - | - | Add the first project with the steps above. |
+| Todo app | `todo/` | Done (#4) | Create, complete and delete tasks; stored in IndexedDB. |
 
 ## Ground rules
 
