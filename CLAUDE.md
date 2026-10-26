@@ -42,12 +42,14 @@ The loop is `.claude/skills/factory-loop/SKILL.md`; read it for the details.
 
 1. React 👀 on each new open issue.
 2. **Questions:** answer in a comment with sources, then close.
-3. **Build work:** ask clarifying questions on the ticket → post a plan → wait for approval →
-   build → verify in Chrome DevTools (`.mcp.json`) → commit screenshots → push → comment with
-   the commit and screenshots → close.
+3. **Build work:** questions on the ticket → plan → build on the ticket's own branch
+   `factory/issue-<N>-<slug>` → verify in Chrome DevTools (`.mcp.json`) → deepsec security review →
+   one PR per ticket (`Closes #N`) with screenshots. The owner reviews, approves and merges on GitHub,
+   which closes the ticket. The loop never merges or closes build tickets itself.
 4. **Never destructive:** no deleting, force-pushing or rewriting history
    (`.claude/hooks/block-destructive.py` blocks it). Anything like that goes to a human.
-5. Every turn ends with an automatic commit and push (`.claude/hooks/auto-commit-push.sh`).
+5. Every turn ends with an automatic commit and push to the ticket branch, never to `main`
+   (`.claude/hooks/auto-commit-push.sh`).
 
 ## Adding a project
 
@@ -59,7 +61,7 @@ The loop is `.claude/skills/factory-loop/SKILL.md`; read it for the details.
 
 | Project | Folder | Status | Summary |
 | --- | --- | --- | --- |
-| Todo app | `todo/` | Done (#4) | Create, complete and delete tasks; stored in IndexedDB. |
+| Todo app | `todo/` | Done (#4, #5, #7) | Tasks with filters, due dates, tags and repeats; IndexedDB. |
 
 ## Ground rules
 
