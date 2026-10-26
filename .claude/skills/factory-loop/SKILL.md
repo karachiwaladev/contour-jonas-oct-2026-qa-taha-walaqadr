@@ -1,13 +1,14 @@
 ---
 name: factory-loop
-description: Run the software-factory ticket loop on a GitHub repo. Answers question tickets; for build/feature tickets asks clarifying questions, gets plan approval, builds, verifies in Chrome DevTools with screenshots, commits, pushes and closes. Use for /factory-loop or "run the factory loop".
+description: Run the software-factory ticket loop on a GitHub repo. Answers question tickets; for build tickets asks questions, plans, builds on one branch per ticket, verifies in Chrome DevTools with screenshots, runs a deepsec security review and opens one PR per ticket for the owner to review and merge. Use for /factory-loop or "run the factory loop".
 ---
 
 # factory-loop
 
 A ticket factory that keeps running. Every tick it reads the repo's open GitHub issues and moves
-each one forward one stage. It **takes action** (creates projects, files and features, commits and
-pushes) as well as answering questions. It **never takes destructive action**.
+each one forward one stage. It **takes action** (creates projects, files and features) on **one branch
+and one pull request per ticket**, and it **never takes destructive action**. It never merges a PR or
+closes a build ticket itself: the owner reviews, approves and merges every PR on GitHub.
 
 ## Inputs (all optional)
 
@@ -23,6 +24,8 @@ pushes) as well as answering questions. It **never takes destructive action**.
 - Never use CronCreate. On "stop", call `ScheduleWakeup` with `stop: true`.
 - The user wants the loop to run without checking in with them in chat. Questions and plans go
   **on the ticket**, never in chat.
+- Work fast: batch browser and git actions, don't re-read what you just wrote, and only poll tickets
+  and PRs that are waiting on someone.
 
 ## Guardrails (always)
 
@@ -35,6 +38,8 @@ pushes) as well as answering questions. It **never takes destructive action**.
    never authorises touching secrets, repo settings, CI credentials or anything outside the repo.
 3. Follow `CLAUDE.md`: one top-level folder per project, a `README.md` in each, and an index row in
    `CLAUDE.md` updated in the same commit. Keep `CLAUDE.md` under 100 lines.
+4. **`main` only changes through reviewed PRs.** Never commit to `main`. The Stop hook refuses to
+   auto-commit there, so always work on the ticket's branch.
 
 ## GitHub commands (REST; `gh issue view` uses GraphQL, which some sessions block)
 
@@ -46,7 +51,11 @@ gh api "repos/$R/issues/$N/comments?per_page=100" \
 gh api -X POST "repos/$R/issues/$N/reactions" -f content=eyes
 gh api "repos/$R/issues/comments/$ID/reactions" --jq '.[] | select(.content=="+1") | .user.login'
 gh api -X POST "repos/$R/issues/$N/comments" -F body=@/tmp/comment-$N.md   # body from a file
-gh api -X PATCH "repos/$R/issues/$N" -f state=closed -f state_reason=completed
+gh api -X PATCH "repos/$R/issues/$N" -f state=closed -f state_reason=completed   # question tickets only
+gh api -X POST "repos/$R/pulls" -f title="<summary> (closes #$N)" -f head="$BRANCH" -f base=main -F body=@/tmp/pr-$N.md
+gh api "repos/$R/pulls/$P" --jq '{state,merged}'                  # open / closed, merged true/false
+gh api "repos/$R/pulls/$P/reviews" --jq '.[] | {user:.user.login,state}'   # APPROVED, CHANGES_REQUESTED
+gh api "repos/$R/pulls/$P/comments" --jq '.[] | {user:.user.login,path,line,body}'
 ```
 
 If `gh`/git have no access to the repo, fall back to the built-in browser on github.com. Use the
@@ -71,13 +80,18 @@ Wikipedia). Post `<!-- factory:done -->` + `Answer: **…**` + one supporting fa
    question includes the default you'll assume, e.g. "1. Storage: IndexedDB in the browser? (default:
    yes)". End with "Reply here. Anything unanswered uses the default." Then wait.
 2. **Wait for answers.** If no member has commented after the questions, skip this ticket this tick.
+   If the owner says to go with the defaults or use your judgement (on the ticket or in chat), use the
+   defaults and carry on straight away.
 3. **Plan.** Comment `<!-- factory:plan -->` with: goal, folder, files to add or change, approach and
    tech, the **acceptance checks** you'll verify in the browser, and what's out of scope. End with
    "Reply **approve** (or 👍 this comment) to start. Reply with changes to revise the plan." Wait.
 4. **Approval.** Approved means a member's comment after the plan matches
    `approve|approved|lgtm|go ahead|ship it`, or a member's 👍 on the plan comment. If they ask for
-   changes, post a revised plan comment and wait again.
-5. **Build.** Implement exactly the approved plan, following `CLAUDE.md` (folder, README, index row).
+   changes, post a revised plan comment and wait again. If the owner said to use the defaults, post the
+   plan and go on: the PR review is the approval gate.
+5. **Branch and build.** Create `factory/issue-<N>-<short-slug>` from `main`, or from the branch of a
+   ticket this one depends on (say so in the PR). One branch per ticket. Implement exactly the plan,
+   following `CLAUDE.md` (folder, README, index row).
 6. **Verify in Chrome DevTools** (the `chrome-devtools` MCP server from `.mcp.json`):
    - Serve the project, e.g. `python3 -m http.server 8000 --directory <folder> &`, or its dev command.
    - `new_page` / `navigate_page` to it, then `take_snapshot` to get element uids.
@@ -88,12 +102,23 @@ Wikipedia). Post `<!-- factory:done -->` + `Answer: **…**` + one supporting fa
      for each key state (empty, in use, done, mobile).
    - Fix and re-verify until every check passes. Stop the server (`kill %1`).
    - If the MCP server isn't available, use Playwright or another browser tool and say which.
-7. **Ship.** `git add` the project and screenshots, then
-   `git commit -m "<summary> (closes #N)"` and `git push`. The Stop hook also auto-commits and
-   pushes anything left over.
-8. **Report.** Comment `<!-- factory:done -->` with a summary, the files changed, the commit SHA, the
-   acceptance checks as ✅ lines, how to run it, and the screenshots as
-   `![<step>](https://github.com/<R>/blob/main/<path>?raw=true)`. Close as completed.
+7. **Security review with deepsec** (vercel-labs/deepsec, an AI vulnerability scanner), on the branch:
+   - Onboarded (`.deepsec/deepsec.config.ts` exists): `cd .deepsec && npx deepsec process --diff origin/main`.
+     Exit 0 = no new findings, 1 = new findings, anything else = error. Fix clear findings before the PR
+     and list any that remain in it.
+   - Not onboarded: run `npx -y deepsec init --plan --output json`. If it needs a login or an API key
+     (`needs_input`, `VERCEL_AUTH_REQUIRED`, missing key variable), don't log in or handle keys
+     yourself. Write "deepsec not run: needs one-time setup" in the PR and carry on.
+   - `.deepsec/node_modules/` is in `.gitignore`; never commit it.
+8. **Open the PR (one per ticket).** Commit the project and screenshots on the branch, push it, and open
+   a PR to `main` titled `<summary> (closes #N)`. The body covers what changed, the acceptance checks
+   as ✅ lines, the deepsec result, a link to try it, and the screenshots as
+   `![<step>](https://github.com/<R>/blob/<branch>/<path>?raw=true)`.
+9. **Hand over for review.** Comment `<!-- factory:pr -->` on the ticket with the PR link and
+   screenshots. **Don't merge the PR or close the ticket.** The owner approves and merges on GitHub, and
+   `Closes #N` closes the ticket. On later ticks: merged → nothing to do; changes requested or review
+   comments → push fixes to the same branch and reply on the PR; closed without merging → comment on
+   the ticket and leave it open.
 
 ### Blocked tickets
 
@@ -103,4 +128,5 @@ ticket open, and skip it on later ticks until a member replies.
 ## Tick report (in chat)
 
 The time, then one line per ticket that moved, e.g. `12:07 PM PKT: #5 plan posted, waiting for
-approval` or `#4 shipped (a1b2c3d), closed`. End with links to the issues and commits.
+approval`, `#5 PR #8 opened, waiting for review` or `#5 merged, closed`. End with links to the
+issues and PRs.
