@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Stop hook: commit and push whatever changed during the turn.
+# Stop hook: commit and push whatever changed during the turn, on the ticket branch.
+# main only changes through reviewed PRs, so nothing is auto-committed there.
 # Never forces, never rewrites history, never commits likely secrets. Always exits 0.
 set -u
 cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null || exit 0
@@ -10,6 +11,10 @@ for state in MERGE_HEAD REBASE_HEAD CHERRY_PICK_HEAD rebase-merge rebase-apply; 
   if [ -e "$gitdir/$state" ]; then echo "auto-commit: $state in progress, skipping" >&2; exit 0; fi
 done
 branch=$(git symbolic-ref --quiet --short HEAD) || { echo "auto-commit: detached HEAD, skipping" >&2; exit 0; }
+default=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
+case "$branch" in
+  main|master|"${default:-main}") echo "auto-commit: on $branch; changes go through a ticket branch and PR, so nothing is committed here" >&2; exit 0 ;;
+esac
 
 git add -A
 # Leave anything that looks like a secret out of the commit (unstage only, never delete).
