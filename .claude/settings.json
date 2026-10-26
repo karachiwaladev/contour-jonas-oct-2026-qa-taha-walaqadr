@@ -1,0 +1,38 @@
+{
+  "enabledMcpjsonServers": ["chrome-devtools"],
+  "permissions": {
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(rm -rf:*)",
+      "Bash(gh repo delete:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-destructive.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "in=$(cat); printf '%s' \"$in\" | python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/log-prompts.py\"; bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/auto-commit-push.sh\"",
+            "timeout": 90
+          }
+        ]
+      }
+    ]
+  }
+}
