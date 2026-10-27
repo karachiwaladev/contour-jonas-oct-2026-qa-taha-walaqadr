@@ -4,12 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Todo</title>
+  <link rel="icon" href="data:,">  <!-- no favicon request, so no 404 in the console -->
+
   <style>
     :root { --bg:#f6f7f9; --card:#fff; --text:#1d2129; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --accent-soft:#dbeafe; --danger:#dc2626; --danger-soft:#fee2e2; --warn:#b45309; --warn-soft:#fef3c7; }
     @media (prefers-color-scheme: dark) {
       :root { --bg:#0f1115; --card:#181b21; --text:#e8eaed; --muted:#9aa0a6; --line:#2a2f37; --accent:#60a5fa; --accent-soft:#1e3a5f; --danger:#f87171; --danger-soft:#3f1d1d; --warn:#fbbf24; --warn-soft:#3b2f12; }
     }
     * { box-sizing: border-box; }
+    :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .seg button:focus-visible { outline-offset:-2px; } /* .seg clips anything outside it */
     body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
     main { max-width:640px; margin:48px auto; padding:0 16px; }
     h1 { font-size:28px; margin:0 0 4px; }
@@ -18,24 +22,41 @@
     input[type=text], input[type=date], select { padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); min-width:0; }
     button { cursor:pointer; border-radius:8px; }
     .add-form { display:grid; grid-template-columns:1fr auto; gap:8px; margin-bottom:16px; }
-    .add-form .row { grid-column:1 / -1; display:flex; gap:8px; flex-wrap:wrap; }
+    .add-form .add { grid-column:2; grid-row:1; }
+    .add-form .row { grid-column:1 / -1; grid-row:2; display:flex; gap:8px; flex-wrap:wrap; }
     .add-form .row .tags-input { flex:1 1 180px; }
     .add { padding:9px 16px; border:0; background:var(--accent); color:#fff; font-weight:600; }
+    .add:disabled { opacity:.6; cursor:progress; }
+    .search { position:relative; margin-bottom:8px; }
+    .search input { width:100%; padding-right:40px; }
+    .search button { position:absolute; right:4px; top:50%; transform:translateY(-50%); border:0; background:none; color:var(--muted); padding:4px 10px; font-size:16px; }
+    .search button[hidden] { display:none; }
     .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px; }
     .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--card); }
     .seg button { border:0; border-radius:0; background:none; color:var(--text); padding:6px 12px; font-size:14px; }
     .seg button + button { border-left:1px solid var(--line); }
+    .seg button { white-space:nowrap; }
+    @media (max-width:480px) { .seg button { padding:6px 8px; font-size:13px; } }
     .seg button[aria-pressed=true] { background:var(--accent-soft); color:var(--accent); font-weight:600; }
     .tag-filter { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+    .active-filters { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; padding:8px 12px; border-radius:8px; background:var(--accent-soft); color:var(--text); font-size:14px; }
+    .active-filters[hidden] { display:none; }
+    .active-filters span { flex:1 1 auto; min-width:0; word-break:break-word; }
+    .clear-filters { border:0; background:none; color:var(--accent); font-weight:600; padding:2px 4px; font-size:14px; }
     .tag-filter:empty { display:none; }
     .repeat { padding:1px 8px; border-radius:999px; border:1px solid var(--line); line-height:20px; color:var(--text); }
+    .prio { padding:1px 8px; border-radius:999px; line-height:20px; font-weight:600; }
+    .prio-high { background:var(--danger-soft); color:var(--danger); }
+    .prio-low { border:1px solid var(--line); color:var(--muted); font-weight:400; }
     .chip { display:inline-block; padding:1px 9px; border-radius:999px; background:var(--accent-soft); color:var(--accent); font-size:12px; line-height:20px; }
     .tag-filter button { border:1px solid var(--line); background:var(--card); color:var(--text); padding:2px 10px; border-radius:999px; font-size:13px; }
     .tag-filter button[aria-pressed=true] { background:var(--accent); border-color:var(--accent); color:#fff; }
     ul { list-style:none; margin:0; padding:0; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
     li { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-top:1px solid var(--line); }
     li:first-child { border-top:0; }
-    li input[type=checkbox] { width:18px; height:18px; margin-top:3px; accent-color:var(--accent); flex:none; }
+    li input[type=checkbox] { width:22px; height:22px; margin:1px 0 0; accent-color:var(--accent); flex:none; cursor:pointer; }
+    .field { display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:14px; }
+    .field span { font-weight:600; }
     li .body { flex:1; min-width:0; }
     li .title { word-break:break-word; }
     li.done .title { text-decoration:line-through; color:var(--muted); }
@@ -55,17 +76,24 @@
     .delete { color:var(--danger); }
     .empty { display:block; padding:24px; text-align:center; color:var(--muted); }
     .count { color:var(--muted); font-size:14px; margin-top:12px; }
+    .count[hidden] { display:none; }
+    .toast-box { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); display:flex; align-items:center; gap:14px;
+      max-width:calc(100% - 32px); padding:10px 14px 10px 16px; border-radius:10px; background:var(--text); color:var(--bg);
+      box-shadow:0 6px 24px rgba(0,0,0,.25); font-size:14px; }
+    .toast-box[hidden] { display:none; }
+    main { padding-bottom:80px; } /* room under the footer, so the undo bar never covers it */
+    .toast-box button { border:0; background:none; color:var(--accent-soft); font-weight:700; padding:4px 6px; }
+    .count strong { color:var(--text); font-weight:600; }
   </style>
 </head>
 <body>
 <main>
   <h1>Todo</h1>
-  <p class="sub">Tasks are saved in your browser (IndexedDB), so they survive a reload.</p>
+  <p class="sub">Your tasks are saved on this device.</p>
   <form id="add-form" class="add-form">
     <input id="new-title" type="text" placeholder="What needs doing?" aria-label="New task" autocomplete="off" required>
-    <button class="add" type="submit">Add</button>
     <div class="row">
-      <input id="new-due" type="date" aria-label="Due date (optional)">
+      <label class="field"><span>Due</span><input id="new-due" type="date" aria-label="Due date (optional)"></label>
       <input id="new-tags" class="tags-input" type="text" placeholder="Tags, comma separated" aria-label="Tags (optional)" autocomplete="off">
       <select id="new-repeat" aria-label="Repeat">
         <option value="">Doesn't repeat</option>
@@ -74,24 +102,60 @@
         <option value="weekly">Weekly</option>
         <option value="monthly">Monthly</option>
       </select>
+      <select id="new-priority" aria-label="Priority">
+        <option value="high">High priority</option>
+        <option value="medium" selected>Medium priority</option>
+        <option value="low">Low priority</option>
+      </select>
     </div>
+    <!-- After the options so Tab reaches it last; the grid still shows it beside the title. -->
+    <button class="add" type="submit">Add</button>
   </form>
+  <div class="search">
+    <input id="search" type="text" placeholder="Search tasks and tags" aria-label="Search tasks and tags" autocomplete="off">
+    <button type="button" id="clear-search" aria-label="Clear search" hidden>✕</button>
+  </div>
   <div class="toolbar">
     <div class="seg" role="group" aria-label="Show tasks">
       <button type="button" data-status="all">All</button>
       <button type="button" data-status="active">Active</button>
       <button type="button" data-status="completed">Completed</button>
     </div>
+    <div class="seg" role="group" aria-label="Filter by priority">
+      <button type="button" data-priority="all">Any priority</button>
+      <button type="button" data-priority="high">High</button>
+      <button type="button" data-priority="medium">Medium</button>
+      <button type="button" data-priority="low">Low</button>
+    </div>
+    <div class="seg" role="group" aria-label="Filter by due date">
+      <button type="button" data-due="all">Any date</button>
+      <button type="button" data-due="overdue">Overdue</button>
+      <button type="button" data-due="today">Today</button>
+      <button type="button" data-due="week">Next 7 days</button>
+      <button type="button" data-due="none">No date</button>
+    </div>
   </div>
   <div class="tag-filter" id="tag-filter" role="group" aria-label="Filter by tag"></div>
+  <div class="active-filters" id="active-filters" hidden>
+    <span id="active-list"></span>
+    <button type="button" class="clear-filters">✕ Clear filters</button>
+  </div>
   <ul id="list" aria-label="Tasks"></ul>
-  <p class="count" id="count"></p>
+  <footer class="count" id="count" aria-live="polite" hidden></footer>
 </main>
+<!-- Stays in the page so screen readers announce what appears inside it. -->
+<div id="toast" role="status" aria-live="polite">
+  <div class="toast-box" hidden>
+    <span id="toast-text"></span>
+    <button type="button" id="undo" aria-keyshortcuts="Control+Z">Undo</button>
+  </div>
+</div>
 <script>
 // Client-side database: IndexedDB, one object store "tasks" keyed by auto-increment id.
 // Task: { id, title, done, createdAt, due: "YYYY-MM-DD" | null, tags: string[],
-//         repeat: "daily" | "weekdays" | "weekly" | "monthly" | null, anchorDay, spawned }
-// Tasks saved before these fields existed simply don't have them.
+//         repeat: "daily" | "weekdays" | "weekly" | "monthly" | null, anchorDay, spawned,
+//         priority: "high" | "medium" | "low" }
+// Tasks saved before these fields existed simply don't have them (no priority = medium).
 // Recurring: ticking a repeating task off keeps it in Completed and adds the next copy
 // (once: `spawned` stops a second copy if it's unticked and ticked again).
 const DB_NAME = "todo-app", STORE = "tasks", FILTER_KEY = "todo-filter";
@@ -174,18 +238,78 @@ function parseTags(text) {
   return [...new Set(String(text || "").split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))];
 }
 
+const PRIORITY_LABELS = { high: "High", medium: "Medium", low: "Low" };
+
+// Is `key` one of this map's own keys? Plain `map[key]` also finds inherited names like
+// "__proto__", "constructor" and "toString", which then pass as a real priority or repeat rule.
+const own = (map, key) => typeof key === "string" && Object.hasOwn(map, key);
+
+// Saved tasks are trusted only after cleaning: an older version, a corrupted save or anything else
+// on this origin can leave a record with missing or wrong-typed fields, and one such record used
+// to stop the whole list rendering. Cleaning happens on every load and never writes back; the
+// cleaned values are only saved if the user edits or ticks that task.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function cleanTask(raw) {
+  const t = raw && typeof raw === "object" ? raw : {};
+  const title = typeof t.title === "string" ? t.title : t.title == null ? "" : String(t.title);
+  const tags = Array.isArray(t.tags)
+    ? parseTags(t.tags.filter((x) => typeof x === "string" || typeof x === "number").join(","))
+    : typeof t.tags === "string" ? parseTags(t.tags) : [];
+  const due = typeof t.due === "string" && DATE_RE.test(t.due) && !isNaN(parseDate(t.due)) ? t.due : null;
+  const repeat = own(REPEAT_LABELS, t.repeat) ? t.repeat : null;
+  const priority = own(PRIORITY_LABELS, t.priority) ? t.priority : "medium";
+  return {
+    ...t,
+    title: title.trim() ? title : "(untitled)",
+    done: t.done === true,
+    createdAt: Number.isFinite(t.createdAt) ? t.createdAt : 0,
+    due, tags, priority,
+    repeat,
+    anchorDay: Number.isInteger(t.anchorDay) && t.anchorDay >= 1 && t.anchorDay <= 31 ? t.anchorDay : null,
+    spawned: t.spawned === true,
+  };
+}
+const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+function priorityOf(task) { return own(PRIORITY_LABELS, task.priority) ? task.priority : "medium"; }
+
+// Due date first (undated last), then priority (high first), then oldest first.
 function byDue(a, b) {
   if (a.due && b.due && a.due !== b.due) return a.due < b.due ? -1 : 1;
   if (a.due && !b.due) return -1;
   if (!a.due && b.due) return 1;
-  return a.createdAt - b.createdAt;
+  const p = PRIORITY_RANK[priorityOf(a)] - PRIORITY_RANK[priorityOf(b)];
+  return p || a.createdAt - b.createdAt;
+}
+
+// Due-date filter. "Overdue" matches the red marking (open tasks only); "This week" is today
+// and the next 6 days.
+const DUE_FILTERS = ["all", "overdue", "today", "week", "none"];
+function matchesDue(task, due, today) {
+  if (due === "all") return true;
+  if (due === "none") return !task.due;
+  if (!task.due) return false;
+  if (due === "overdue") return !task.done && task.due < today;
+  if (due === "today") return task.due === today;
+  return task.due >= today && task.due <= fmtDate(addDays(parseDate(today), 6));
+}
+
+// Search: every word must appear (case-insensitive) in the title or in one of the tags.
+function searchWords(text) { return text.toLowerCase().split(/\s+/).filter(Boolean); }
+function matchesSearch(task, words) {
+  const fields = [task.title.toLowerCase(), ...(task.tags || [])];
+  return words.every((w) => fields.some((f) => f.includes(w)));
 }
 
 function loadFilter() {
   try {
     const f = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");
-    return { status: ["all", "active", "completed"].includes(f.status) ? f.status : "all", tag: f.tag || null };
-  } catch (e) { return { status: "all", tag: null }; }
+    return {
+      status: ["all", "active", "completed"].includes(f.status) ? f.status : "all",
+      tag: typeof f.tag === "string" && f.tag ? f.tag : null,
+      priority: own(PRIORITY_LABELS, f.priority) ? f.priority : "all",
+      due: DUE_FILTERS.includes(f.due) ? f.due : "all",
+    };
+  } catch (e) { return { status: "all", tag: null, priority: "all", due: "all" }; }
 }
 function saveFilter() {
   try { localStorage.setItem(FILTER_KEY, JSON.stringify(filter)); } catch (e) { /* storage unavailable */ }
@@ -198,7 +322,11 @@ const titleInput = document.getElementById("new-title");
 const dueInput = document.getElementById("new-due");
 const tagsInput = document.getElementById("new-tags");
 const repeatInput = document.getElementById("new-repeat");
+const priorityInput = document.getElementById("new-priority");
+const searchInput = document.getElementById("search");
+const clearSearch = document.getElementById("clear-search");
 let filter = loadFilter();
+let query = ""; // search text; not remembered across reloads
 
 function el(tag, props = {}, children = []) {
   const node = Object.assign(document.createElement(tag), props);
@@ -226,26 +354,34 @@ function renderTask(db, task, today) {
   li.dataset.id = task.id;
 
   const box = el("input", { type: "checkbox", checked: task.done });
-  box.setAttribute("aria-label", `Mark "${task.title}" done`);
+  // The name says what ticking will do, matching the tooltip.
+  box.setAttribute("aria-label", task.done ? `Mark "${task.title}" not done` : `Mark "${task.title}" done`);
+  box.title = task.done ? "Mark not done" : "Mark done";
   box.addEventListener("change", async () => {
     const updated = { ...task, done: box.checked };
     if (box.checked && task.repeat && !task.spawned) {
       updated.spawned = true;
       await store.add(db, {
-        title: task.title, done: false, createdAt: Date.now(), tags: tags,
+        title: task.title, done: false, createdAt: Date.now(), tags: tags, priority: priorityOf(task),
         due: nextDue(due, task.repeat, task.anchorDay), repeat: task.repeat, anchorDay: task.anchorDay,
       });
     }
     await store.put(db, updated);
+    keepFocus(li, task.id, "check");
     refresh();
   });
 
+  const priority = priorityOf(task);
   const meta = el("div", { className: "meta" });
+  // Only High and Low get a label; Medium is the norm and stays quiet.
+  if (priority !== "medium") {
+    meta.append(el("span", { className: `prio prio-${priority}`, textContent: `${PRIORITY_LABELS[priority]} priority` }));
+  }
   if (due) {
     const text = state === "overdue" ? `Overdue · ${dueLabel(due)}` : state === "today" ? "Due today" : `Due ${dueLabel(due)}`;
     meta.append(el("span", { className: "due", textContent: text }));
   }
-  if (task.repeat) meta.append(el("span", { className: "repeat", textContent: "↻ " + REPEAT_LABELS[task.repeat] }));
+  if (own(REPEAT_LABELS, task.repeat)) meta.append(el("span", { className: "repeat", textContent: "↻ " + REPEAT_LABELS[task.repeat] }));
   for (const t of tags) meta.append(el("span", { className: "chip", textContent: "#" + t }));
 
   const editDue = el("input", { type: "date", value: due || "" });
@@ -257,30 +393,43 @@ function renderTask(db, task, today) {
   editRepeat.append(el("option", { value: "", textContent: "Doesn't repeat" }),
     ...Object.entries(REPEAT_LABELS).map(([value, label]) => el("option", { value, textContent: label })));
   editRepeat.value = task.repeat || "";
+  const editPriority = el("select");
+  editPriority.setAttribute("aria-label", "Priority");
+  editPriority.append(...Object.entries(PRIORITY_LABELS).map(([value, label]) => el("option", { value, textContent: `${label} priority` })));
+  editPriority.value = priority;
   const save = el("button", { type: "button", className: "save", textContent: "Save" });
   const cancel = el("button", { type: "button", textContent: "Cancel" });
-  const editor = el("div", { className: "editor", hidden: true }, [editDue, editTags, editRepeat, save, cancel]);
+  const dueField = el("label", { className: "field" }, [el("span", { textContent: "Due" }), editDue]);
+  const editor = el("div", { className: "editor", hidden: true }, [dueField, editTags, editRepeat, editPriority, save, cancel]);
   const doSave = async () => {
     const newDue = editDue.value || null;
     const rep = editRepeat.value
       ? (editRepeat.value === task.repeat && newDue === due ? { repeat: task.repeat, anchorDay: task.anchorDay } : repeatFields(editRepeat.value, newDue))
       : { repeat: null, anchorDay: null };
-    await store.put(db, { ...task, due: newDue, tags: parseTags(editTags.value), ...rep });
+    await store.put(db, { ...task, due: newDue, tags: parseTags(editTags.value), priority: editPriority.value, ...rep });
+    keepFocus(li, task.id, "edit");
     refresh();
   };
+  // Closing the editor hands focus back to its Edit button, not to the now-hidden fields.
+  const closeEditor = () => { editor.hidden = true; edit.focus(); };
   save.addEventListener("click", doSave);
-  cancel.addEventListener("click", () => { editor.hidden = true; });
+  cancel.addEventListener("click", closeEditor);
   editor.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); doSave(); }
-    if (e.key === "Escape") editor.hidden = true;
+    if (e.key === "Escape") closeEditor();
   });
 
   const edit = el("button", { type: "button", className: "edit", textContent: "Edit" });
-  edit.setAttribute("aria-label", `Edit due date, tags and repeat of "${task.title}"`);
+  edit.setAttribute("aria-label", `Edit due date, tags, repeat and priority of "${task.title}"`);
   edit.addEventListener("click", () => { editor.hidden = !editor.hidden; if (!editor.hidden) editDue.focus(); });
   const del = el("button", { type: "button", className: "delete", textContent: "Delete" });
   del.setAttribute("aria-label", `Delete "${task.title}"`);
-  del.addEventListener("click", async () => { await store.remove(db, task.id); refresh(); });
+  del.addEventListener("click", async () => {
+    await store.remove(db, task.id);
+    keepFocus(li, null, "check");
+    offerUndo(task);
+    refresh();
+  });
 
   const body = el("div", { className: "body" }, [el("span", { className: "title", textContent: task.title }), meta, editor]);
   li.append(box, body, el("div", { className: "actions" }, [edit, del]));
@@ -289,47 +438,185 @@ function renderTask(db, task, today) {
 
 let refresh = () => {};
 
+// Undo for Delete: "Task deleted · Undo" for 5 s. Only the latest delete can be undone; adding a
+// task or deleting another replaces it. The timer pauses while the bar is hovered or focused.
+const toastBox = document.querySelector(".toast-box");
+const UNDO_MS = 5000;
+let lastDeleted = null, toastTimer = null, undoDelete = () => {};
+function hideUndo() {
+  clearTimeout(toastTimer);
+  toastBox.hidden = true;
+  document.getElementById("toast-text").textContent = "";
+  lastDeleted = null;
+}
+function armUndoTimer() { clearTimeout(toastTimer); toastTimer = setTimeout(hideUndo, UNDO_MS); }
+function offerUndo(task) {
+  lastDeleted = task;
+  toastBox.hidden = false;
+  document.getElementById("toast-text").textContent = "Task deleted";
+  armUndoTimer();
+}
+toastBox.addEventListener("mouseenter", () => clearTimeout(toastTimer));
+toastBox.addEventListener("focusin", () => clearTimeout(toastTimer));
+toastBox.addEventListener("mouseleave", () => { if (!toastBox.contains(document.activeElement)) armUndoTimer(); });
+toastBox.addEventListener("focusout", (e) => { if (!toastBox.contains(e.relatedTarget)) armUndoTimer(); });
+let clearFilters = () => {};
+
+// "Showing: Active · High priority · Overdue · #work · "milk"" with a Clear filters button,
+// so a saved filter can't silently hide tasks after a reload.
+const activeBar = document.getElementById("active-filters");
+function renderActiveFilters(words) {
+  const parts = [];
+  if (filter.status !== "all") parts.push(filter.status === "active" ? "Active" : "Completed");
+  if (filter.priority !== "all") parts.push(`${PRIORITY_LABELS[filter.priority]} priority`);
+  if (filter.due !== "all") parts.push(document.querySelector(`[data-due="${filter.due}"]`).textContent);
+  if (filter.tag) parts.push("#" + filter.tag);
+  if (words.length) parts.push(`"${query.trim()}"`);
+  activeBar.hidden = !parts.length;
+  document.getElementById("active-list").textContent = parts.length ? "Showing: " + parts.join(" · ") : "";
+}
+
+// The list is rebuilt after every change, which would drop keyboard focus to the page body.
+// Before a rebuild, remember which row (and control) had it; afterwards put it back on the
+// same task, or on the task now in that position (deleted or filtered out), or on the
+// new-task box when the list is empty.
+let pendingFocus = null;
+function keepFocus(li, id, part) {
+  pendingFocus = { id, part, index: [...list.querySelectorAll("li[data-id]")].indexOf(li) };
+}
+// Overlapping actions (fast repeated Space, double Enter) cause several rebuilds; the later ones
+// have no pending request, so they fall back to wherever focus was inside the list just before.
+function focusInList() {
+  const a = document.activeElement, li = a && a.closest && a.closest("#list li[data-id]");
+  if (!li) return null;
+  return { id: li.dataset.id, part: a.classList.contains("edit") ? "edit" : "check", index: [...list.querySelectorAll("li[data-id]")].indexOf(li) };
+}
+function restoreFocus(fallback) {
+  const wanted = pendingFocus || fallback;
+  if (!wanted) return;
+  const { id, part, index } = wanted;
+  pendingFocus = null;
+  const rows = [...list.querySelectorAll("li[data-id]")];
+  const row = rows.find((r) => r.dataset.id === String(id)) || rows[Math.min(Math.max(index, 0), rows.length - 1)];
+  const target = row ? row.querySelector(part === "edit" && row.dataset.id === String(id) ? ".edit" : "input[type=checkbox]") : titleInput;
+  target.focus();
+}
+
 function render(db, tasks) {
   const today = todayStr();
   const allTags = [...new Set(tasks.flatMap((t) => t.tags || []))].sort();
   if (filter.tag && !allTags.includes(filter.tag)) { filter.tag = null; saveFilter(); }
 
   for (const b of document.querySelectorAll("[data-status]")) b.setAttribute("aria-pressed", String(b.dataset.status === filter.status));
+  for (const b of document.querySelectorAll("[data-priority]")) b.setAttribute("aria-pressed", String(b.dataset.priority === filter.priority));
+  for (const b of document.querySelectorAll("[data-due]")) b.setAttribute("aria-pressed", String(b.dataset.due === filter.due));
   renderTagFilter(allTags);
 
+  const words = searchWords(query);
   const shown = tasks
     .filter((t) => filter.status === "all" || (filter.status === "active" ? !t.done : t.done))
     .filter((t) => !filter.tag || (t.tags || []).includes(filter.tag))
+    .filter((t) => filter.priority === "all" || priorityOf(t) === filter.priority)
+    .filter((t) => matchesDue(t, filter.due, today))
+    .filter((t) => matchesSearch(t, words))
     .sort(byDue);
 
+  const hadFocus = focusInList();
   list.replaceChildren();
   if (!shown.length) {
-    list.append(el("li", { className: "empty", textContent: tasks.length ? "No tasks match this filter." : "No tasks yet. Add one above." }));
+    const why = !tasks.length ? "No tasks yet. Add one above."
+      : words.length ? "No tasks match your search."
+      : "No tasks match these filters. Use Clear filters above to see them all.";
+    list.append(el("li", { className: "empty", textContent: why }));
   }
   for (const task of shown) list.append(renderTask(db, task, today));
+  restoreFocus(hadFocus);
 
-  const left = tasks.filter((t) => !t.done).length;
-  const filtered = filter.status !== "all" || filter.tag;
-  count.textContent = tasks.length ? `${left} of ${tasks.length} left` + (filtered ? ` · showing ${shown.length}` : "") : "";
+  // Footer: open and done across all tasks, plus how many the current filters show.
+  const open = tasks.filter((t) => !t.done).length;
+  const filtered = filter.status !== "all" || filter.tag || filter.priority !== "all" || filter.due !== "all" || words.length;
+  renderActiveFilters(words);
+  count.hidden = !tasks.length;
+  count.replaceChildren(el("strong", { textContent: String(open) }), " open · ",
+    el("strong", { textContent: String(tasks.length - open) }), " done",
+    filtered ? ` · showing ${shown.length}` : "");
 }
 
 openDb().then((db) => {
-  refresh = async () => render(db, await store.all(db));
+  refresh = async () => render(db, (await store.all(db)).map(cleanTask));
   for (const b of document.querySelectorAll("[data-status]")) {
     b.addEventListener("click", () => { filter.status = b.dataset.status; saveFilter(); refresh(); });
   }
+  for (const b of document.querySelectorAll("[data-priority]")) {
+    b.addEventListener("click", () => { filter.priority = b.dataset.priority; saveFilter(); refresh(); });
+  }
+  for (const b of document.querySelectorAll("[data-due]")) {
+    b.addEventListener("click", () => { filter.due = b.dataset.due; saveFilter(); refresh(); });
+  }
+  const setQuery = (text) => { query = text; searchInput.value = text; clearSearch.hidden = !text; refresh(); };
+  searchInput.addEventListener("input", () => setQuery(searchInput.value));
+  searchInput.addEventListener("keydown", (e) => { if (e.key === "Escape") setQuery(""); });
+  clearSearch.addEventListener("click", () => { setQuery(""); searchInput.focus(); });
+  // One click back to everything: status, priority, due date, tag and search. The bar then hides,
+  // so focus goes to the search box rather than being lost with the button.
+  clearFilters = () => {
+    filter = { status: "all", tag: null, priority: "all", due: "all" };
+    saveFilter();
+    setQuery("");
+    searchInput.focus();
+  };
+  document.querySelector(".clear-filters").addEventListener("click", clearFilters);
+  // Put the deleted task back exactly as it was (same id, fields and done state) and focus it.
+  undoDelete = async () => {
+    const task = lastDeleted;
+    if (!task) return;
+    hideUndo();
+    await store.put(db, task);
+    pendingFocus = { id: task.id, part: "check", index: 0 };
+    refresh();
+  };
+  document.getElementById("undo").addEventListener("click", undoDelete);
+  // Ctrl+Z / Cmd+Z undoes a delete, except while typing, where it keeps its normal text meaning.
+  document.addEventListener("keydown", (e) => {
+    const typing = e.target.matches?.("input[type=text], input[type=search], input[type=date], textarea, select");
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z" && lastDeleted && !typing) {
+      e.preventDefault();
+      undoDelete();
+    }
+  });
+  // A second submit while the first is still saving (double-click, double Enter) is ignored,
+  // so it can't add the same task twice. Same-named tasks added on purpose are still fine.
+  const addButton = document.querySelector(".add");
+  let adding = false;
+  // Enter adds the task from any field. Text boxes already submit on Enter; the date field and a
+  // closed dropdown don't, so do it for them (an open dropdown keeps Enter for picking an option).
+  document.getElementById("add-form").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    if (e.target.tagName === "SELECT" || e.target.type === "date") { e.preventDefault(); e.currentTarget.requestSubmit(); }
+  });
   document.getElementById("add-form").addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (adding) return;
     const title = titleInput.value.trim();
     if (!title) return;
-    const due = dueInput.value || null;
-    await store.add(db, { title, done: false, createdAt: Date.now(), due, tags: parseTags(tagsInput.value), ...repeatFields(repeatInput.value, due) });
-    titleInput.value = "";
-    dueInput.value = "";
-    tagsInput.value = "";
-    repeatInput.value = "";
-    titleInput.focus();
-    refresh();
+    adding = true;
+    addButton.disabled = true;
+    try {
+      const due = dueInput.value || null;
+      await store.add(db, { title, done: false, createdAt: Date.now(), due, tags: parseTags(tagsInput.value),
+        priority: priorityInput.value, ...repeatFields(repeatInput.value, due) });
+      titleInput.value = "";
+      dueInput.value = "";
+      tagsInput.value = "";
+      repeatInput.value = "";
+      priorityInput.value = "medium";
+      hideUndo(); // adding something new ends the chance to undo the last delete
+      titleInput.focus();
+      await refresh();
+    } finally {
+      adding = false;
+      addButton.disabled = false;
+    }
   });
   refresh();
 }).catch((err) => {
