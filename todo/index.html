@@ -22,7 +22,8 @@
     input[type=text], input[type=date], select { padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); min-width:0; }
     button { cursor:pointer; border-radius:8px; }
     .add-form { display:grid; grid-template-columns:1fr auto; gap:8px; margin-bottom:16px; }
-    .add-form .row { grid-column:1 / -1; display:flex; gap:8px; flex-wrap:wrap; }
+    .add-form .add { grid-column:2; grid-row:1; }
+    .add-form .row { grid-column:1 / -1; grid-row:2; display:flex; gap:8px; flex-wrap:wrap; }
     .add-form .row .tags-input { flex:1 1 180px; }
     .add { padding:9px 16px; border:0; background:var(--accent); color:#fff; font-weight:600; }
     .add:disabled { opacity:.6; cursor:progress; }
@@ -79,7 +80,6 @@
   <p class="sub">Tasks are saved in your browser (IndexedDB), so they survive a reload.</p>
   <form id="add-form" class="add-form">
     <input id="new-title" type="text" placeholder="What needs doing?" aria-label="New task" autocomplete="off" required>
-    <button class="add" type="submit">Add</button>
     <div class="row">
       <input id="new-due" type="date" aria-label="Due date (optional)">
       <input id="new-tags" class="tags-input" type="text" placeholder="Tags, comma separated" aria-label="Tags (optional)" autocomplete="off">
@@ -96,6 +96,8 @@
         <option value="low">Low priority</option>
       </select>
     </div>
+    <!-- After the options so Tab reaches it last; the grid still shows it beside the title. -->
+    <button class="add" type="submit">Add</button>
   </form>
   <div class="search">
     <input id="search" type="text" placeholder="Search tasks and tags" aria-label="Search tasks and tags" autocomplete="off">
@@ -457,6 +459,12 @@ openDb().then((db) => {
   // so it can't add the same task twice. Same-named tasks added on purpose are still fine.
   const addButton = document.querySelector(".add");
   let adding = false;
+  // Enter adds the task from any field. Text boxes already submit on Enter; the date field and a
+  // closed dropdown don't, so do it for them (an open dropdown keeps Enter for picking an option).
+  document.getElementById("add-form").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    if (e.target.tagName === "SELECT" || e.target.type === "date") { e.preventDefault(); e.currentTarget.requestSubmit(); }
+  });
   document.getElementById("add-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     if (adding) return;
