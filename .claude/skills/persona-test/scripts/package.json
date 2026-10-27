@@ -1,0 +1,9 @@
+{
+  "name": "persona-run",
+  "private": true,
+  "type": "module",
+  "description": "Fast persona runs for the persona-test skill: the Jev decision model picks each move, code checks the result.",
+  "dependencies": {
+    "playwright-core": "1.48.2"
+  }
+}

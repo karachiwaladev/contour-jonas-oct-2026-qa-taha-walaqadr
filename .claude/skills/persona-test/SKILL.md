@@ -36,7 +36,28 @@ touches: Rob for anything that stores, renders or parses input; Dee for filters 
 Lena for new labels or copy; Saul or Carl for anything with money, sign-up or deletion. Called
 directly: run what was asked, or all of them.
 
-## Run
+## Fast mode: Jev (default when a key is set)
+
+`scripts/persona-run.mjs` follows quicke2e (https://github.com/dmoka/quicke2e): the Jev decision
+model picks each persona's next move from moves code builds from the page (~0.3 s each), all typed
+text comes from per-persona palettes, and code flags findings after every move: console errors,
+focus dropped to the page (keyboard personas), probe markup turned into elements (Rob), sideways
+scroll, getting stuck, and low-confidence picks. Personas run in parallel.
+
+```bash
+cd .claude/skills/persona-test/scripts && npm i   # once: playwright-core
+node .claude/skills/persona-test/scripts/persona-run.mjs --base http://localhost:8001 \
+  --personas newbie-nora,keyboard-kai,screenreader-sadie,chaos-cathy,rob --task "<the ticket's request>"
+```
+
+- **Key:** `OPENROUTER_API_KEY` or `JEV_API_KEY`, which the script reads itself from the environment or
+  the repo's `.env` (git-ignored). Never read `.env`, print the key or pass it on a command line
+  yourself. With no key, say so and use `--engine mock` (offline stand-in) or the manual run below.
+- **Options:** `--steps 25`, `--out persona-report.json` (full trail), `--headed`, `--channel chrome`.
+  Endpoint and model can be overridden with `JEV_URL` and `JEV_MODEL`.
+- **Then still do steps 4–5 below**: the script's findings are leads. Re-check each one before reporting it.
+
+## Run (manual, or to re-check fast-mode findings)
 
 1. **Serve locally only.** `npx -y http-server <folder> -p 8001 -c-1 & echo $! > /tmp/persona.pid`, or
    the project's dev command. Never point personas at a production or third-party site.
