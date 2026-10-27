@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Todo</title>
+  <link rel="icon" href="data:,">  <!-- no favicon request, so no 404 in the console -->
+
   <style>
     :root { --bg:#f6f7f9; --card:#fff; --text:#1d2129; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --accent-soft:#dbeafe; --danger:#dc2626; --danger-soft:#fee2e2; --warn:#b45309; --warn-soft:#fef3c7; }
     @media (prefers-color-scheme: dark) {
@@ -29,6 +31,9 @@
     .tag-filter { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
     .tag-filter:empty { display:none; }
     .repeat { padding:1px 8px; border-radius:999px; border:1px solid var(--line); line-height:20px; color:var(--text); }
+    .prio { padding:1px 8px; border-radius:999px; line-height:20px; font-weight:600; }
+    .prio-high { background:var(--danger-soft); color:var(--danger); }
+    .prio-low { border:1px solid var(--line); color:var(--muted); font-weight:400; }
     .chip { display:inline-block; padding:1px 9px; border-radius:999px; background:var(--accent-soft); color:var(--accent); font-size:12px; line-height:20px; }
     .tag-filter button { border:1px solid var(--line); background:var(--card); color:var(--text); padding:2px 10px; border-radius:999px; font-size:13px; }
     .tag-filter button[aria-pressed=true] { background:var(--accent); border-color:var(--accent); color:#fff; }
@@ -74,6 +79,11 @@
         <option value="weekly">Weekly</option>
         <option value="monthly">Monthly</option>
       </select>
+      <select id="new-priority" aria-label="Priority">
+        <option value="high">High priority</option>
+        <option value="medium" selected>Medium priority</option>
+        <option value="low">Low priority</option>
+      </select>
     </div>
   </form>
   <div class="toolbar">
@@ -81,6 +91,12 @@
       <button type="button" data-status="all">All</button>
       <button type="button" data-status="active">Active</button>
       <button type="button" data-status="completed">Completed</button>
+    </div>
+    <div class="seg" role="group" aria-label="Filter by priority">
+      <button type="button" data-priority="all">Any priority</button>
+      <button type="button" data-priority="high">High</button>
+      <button type="button" data-priority="medium">Medium</button>
+      <button type="button" data-priority="low">Low</button>
     </div>
   </div>
   <div class="tag-filter" id="tag-filter" role="group" aria-label="Filter by tag"></div>
@@ -90,8 +106,9 @@
 <script>
 // Client-side database: IndexedDB, one object store "tasks" keyed by auto-increment id.
 // Task: { id, title, done, createdAt, due: "YYYY-MM-DD" | null, tags: string[],
-//         repeat: "daily" | "weekdays" | "weekly" | "monthly" | null, anchorDay, spawned }
-// Tasks saved before these fields existed simply don't have them.
+//         repeat: "daily" | "weekdays" | "weekly" | "monthly" | null, anchorDay, spawned,
+//         priority: "high" | "medium" | "low" }
+// Tasks saved before these fields existed simply don't have them (no priority = medium).
 // Recurring: ticking a repeating task off keeps it in Completed and adds the next copy
 // (once: `spawned` stops a second copy if it's unticked and ticked again).
 const DB_NAME = "todo-app", STORE = "tasks", FILTER_KEY = "todo-filter";
@@ -174,18 +191,28 @@ function parseTags(text) {
   return [...new Set(String(text || "").split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))];
 }
 
+const PRIORITY_LABELS = { high: "High", medium: "Medium", low: "Low" };
+const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+function priorityOf(task) { return PRIORITY_LABELS[task.priority] ? task.priority : "medium"; }
+
+// Due date first (undated last), then priority (high first), then oldest first.
 function byDue(a, b) {
   if (a.due && b.due && a.due !== b.due) return a.due < b.due ? -1 : 1;
   if (a.due && !b.due) return -1;
   if (!a.due && b.due) return 1;
-  return a.createdAt - b.createdAt;
+  const p = PRIORITY_RANK[priorityOf(a)] - PRIORITY_RANK[priorityOf(b)];
+  return p || a.createdAt - b.createdAt;
 }
 
 function loadFilter() {
   try {
     const f = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");
-    return { status: ["all", "active", "completed"].includes(f.status) ? f.status : "all", tag: f.tag || null };
-  } catch (e) { return { status: "all", tag: null }; }
+    return {
+      status: ["all", "active", "completed"].includes(f.status) ? f.status : "all",
+      tag: f.tag || null,
+      priority: PRIORITY_LABELS[f.priority] ? f.priority : "all",
+    };
+  } catch (e) { return { status: "all", tag: null, priority: "all" }; }
 }
 function saveFilter() {
   try { localStorage.setItem(FILTER_KEY, JSON.stringify(filter)); } catch (e) { /* storage unavailable */ }
@@ -198,6 +225,7 @@ const titleInput = document.getElementById("new-title");
 const dueInput = document.getElementById("new-due");
 const tagsInput = document.getElementById("new-tags");
 const repeatInput = document.getElementById("new-repeat");
+const priorityInput = document.getElementById("new-priority");
 let filter = loadFilter();
 
 function el(tag, props = {}, children = []) {
@@ -232,7 +260,7 @@ function renderTask(db, task, today) {
     if (box.checked && task.repeat && !task.spawned) {
       updated.spawned = true;
       await store.add(db, {
-        title: task.title, done: false, createdAt: Date.now(), tags: tags,
+        title: task.title, done: false, createdAt: Date.now(), tags: tags, priority: priorityOf(task),
         due: nextDue(due, task.repeat, task.anchorDay), repeat: task.repeat, anchorDay: task.anchorDay,
       });
     }
@@ -240,7 +268,12 @@ function renderTask(db, task, today) {
     refresh();
   });
 
+  const priority = priorityOf(task);
   const meta = el("div", { className: "meta" });
+  // Only High and Low get a label; Medium is the norm and stays quiet.
+  if (priority !== "medium") {
+    meta.append(el("span", { className: `prio prio-${priority}`, textContent: `${PRIORITY_LABELS[priority]} priority` }));
+  }
   if (due) {
     const text = state === "overdue" ? `Overdue · ${dueLabel(due)}` : state === "today" ? "Due today" : `Due ${dueLabel(due)}`;
     meta.append(el("span", { className: "due", textContent: text }));
@@ -257,15 +290,19 @@ function renderTask(db, task, today) {
   editRepeat.append(el("option", { value: "", textContent: "Doesn't repeat" }),
     ...Object.entries(REPEAT_LABELS).map(([value, label]) => el("option", { value, textContent: label })));
   editRepeat.value = task.repeat || "";
+  const editPriority = el("select");
+  editPriority.setAttribute("aria-label", "Priority");
+  editPriority.append(...Object.entries(PRIORITY_LABELS).map(([value, label]) => el("option", { value, textContent: `${label} priority` })));
+  editPriority.value = priority;
   const save = el("button", { type: "button", className: "save", textContent: "Save" });
   const cancel = el("button", { type: "button", textContent: "Cancel" });
-  const editor = el("div", { className: "editor", hidden: true }, [editDue, editTags, editRepeat, save, cancel]);
+  const editor = el("div", { className: "editor", hidden: true }, [editDue, editTags, editRepeat, editPriority, save, cancel]);
   const doSave = async () => {
     const newDue = editDue.value || null;
     const rep = editRepeat.value
       ? (editRepeat.value === task.repeat && newDue === due ? { repeat: task.repeat, anchorDay: task.anchorDay } : repeatFields(editRepeat.value, newDue))
       : { repeat: null, anchorDay: null };
-    await store.put(db, { ...task, due: newDue, tags: parseTags(editTags.value), ...rep });
+    await store.put(db, { ...task, due: newDue, tags: parseTags(editTags.value), priority: editPriority.value, ...rep });
     refresh();
   };
   save.addEventListener("click", doSave);
@@ -276,7 +313,7 @@ function renderTask(db, task, today) {
   });
 
   const edit = el("button", { type: "button", className: "edit", textContent: "Edit" });
-  edit.setAttribute("aria-label", `Edit due date, tags and repeat of "${task.title}"`);
+  edit.setAttribute("aria-label", `Edit due date, tags, repeat and priority of "${task.title}"`);
   edit.addEventListener("click", () => { editor.hidden = !editor.hidden; if (!editor.hidden) editDue.focus(); });
   const del = el("button", { type: "button", className: "delete", textContent: "Delete" });
   del.setAttribute("aria-label", `Delete "${task.title}"`);
@@ -295,11 +332,13 @@ function render(db, tasks) {
   if (filter.tag && !allTags.includes(filter.tag)) { filter.tag = null; saveFilter(); }
 
   for (const b of document.querySelectorAll("[data-status]")) b.setAttribute("aria-pressed", String(b.dataset.status === filter.status));
+  for (const b of document.querySelectorAll("[data-priority]")) b.setAttribute("aria-pressed", String(b.dataset.priority === filter.priority));
   renderTagFilter(allTags);
 
   const shown = tasks
     .filter((t) => filter.status === "all" || (filter.status === "active" ? !t.done : t.done))
     .filter((t) => !filter.tag || (t.tags || []).includes(filter.tag))
+    .filter((t) => filter.priority === "all" || priorityOf(t) === filter.priority)
     .sort(byDue);
 
   list.replaceChildren();
@@ -309,7 +348,7 @@ function render(db, tasks) {
   for (const task of shown) list.append(renderTask(db, task, today));
 
   const left = tasks.filter((t) => !t.done).length;
-  const filtered = filter.status !== "all" || filter.tag;
+  const filtered = filter.status !== "all" || filter.tag || filter.priority !== "all";
   count.textContent = tasks.length ? `${left} of ${tasks.length} left` + (filtered ? ` · showing ${shown.length}` : "") : "";
 }
 
@@ -318,16 +357,21 @@ openDb().then((db) => {
   for (const b of document.querySelectorAll("[data-status]")) {
     b.addEventListener("click", () => { filter.status = b.dataset.status; saveFilter(); refresh(); });
   }
+  for (const b of document.querySelectorAll("[data-priority]")) {
+    b.addEventListener("click", () => { filter.priority = b.dataset.priority; saveFilter(); refresh(); });
+  }
   document.getElementById("add-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const title = titleInput.value.trim();
     if (!title) return;
     const due = dueInput.value || null;
-    await store.add(db, { title, done: false, createdAt: Date.now(), due, tags: parseTags(tagsInput.value), ...repeatFields(repeatInput.value, due) });
+    await store.add(db, { title, done: false, createdAt: Date.now(), due, tags: parseTags(tagsInput.value),
+      priority: priorityInput.value, ...repeatFields(repeatInput.value, due) });
     titleInput.value = "";
     dueInput.value = "";
     tagsInput.value = "";
     repeatInput.value = "";
+    priorityInput.value = "medium";
     titleInput.focus();
     refresh();
   });
