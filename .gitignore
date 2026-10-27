@@ -1,0 +1,2 @@
+# deepsec keeps its install here; only config and findings belong in git
+.deepsec/node_modules/
