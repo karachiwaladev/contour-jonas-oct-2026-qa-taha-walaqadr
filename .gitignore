@@ -1,0 +1,9 @@
+# Secrets: never commit (the Jev key for persona-test lives in .env)
+.env
+.env.*
+
+# Dependencies
+node_modules/
+
+# Persona runs write their full trail here
+persona-report.json

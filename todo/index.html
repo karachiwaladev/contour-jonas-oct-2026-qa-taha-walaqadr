@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Todo</title>
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --text:#1d2129; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --accent-soft:#dbeafe; --danger:#dc2626; --danger-soft:#fee2e2; --warn:#b45309; --warn-soft:#fef3c7; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0f1115; --card:#181b21; --text:#e8eaed; --muted:#9aa0a6; --line:#2a2f37; --accent:#60a5fa; --accent-soft:#1e3a5f; --danger:#f87171; --danger-soft:#3f1d1d; --warn:#fbbf24; --warn-soft:#3b2f12; }
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width:640px; margin:48px auto; padding:0 16px; }
+    h1 { font-size:28px; margin:0 0 4px; }
+    .sub { color:var(--muted); margin:0 0 24px; font-size:14px; }
+    input, select, button { font:inherit; }
+    input[type=text], input[type=date], select { padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); min-width:0; }
+    button { cursor:pointer; border-radius:8px; }
+    .add-form { display:grid; grid-template-columns:1fr auto; gap:8px; margin-bottom:16px; }
+    .add-form .row { grid-column:1 / -1; display:flex; gap:8px; flex-wrap:wrap; }
+    .add-form .row .tags-input { flex:1 1 180px; }
+    .add { padding:9px 16px; border:0; background:var(--accent); color:#fff; font-weight:600; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px; }
+    .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--card); }
+    .seg button { border:0; border-radius:0; background:none; color:var(--text); padding:6px 12px; font-size:14px; }
+    .seg button + button { border-left:1px solid var(--line); }
+    .seg button[aria-pressed=true] { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+    .tag-filter { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+    .tag-filter:empty { display:none; }
+    .repeat { padding:1px 8px; border-radius:999px; border:1px solid var(--line); line-height:20px; color:var(--text); }
+    .chip { display:inline-block; padding:1px 9px; border-radius:999px; background:var(--accent-soft); color:var(--accent); font-size:12px; line-height:20px; }
+    .tag-filter button { border:1px solid var(--line); background:var(--card); color:var(--text); padding:2px 10px; border-radius:999px; font-size:13px; }
+    .tag-filter button[aria-pressed=true] { background:var(--accent); border-color:var(--accent); color:#fff; }
+    ul { list-style:none; margin:0; padding:0; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+    li { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-top:1px solid var(--line); }
+    li:first-child { border-top:0; }
+    li input[type=checkbox] { width:18px; height:18px; margin-top:3px; accent-color:var(--accent); flex:none; }
+    li .body { flex:1; min-width:0; }
+    li .title { word-break:break-word; }
+    li.done .title { text-decoration:line-through; color:var(--muted); }
+    .meta { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:4px; font-size:12px; color:var(--muted); }
+    .meta:empty { display:none; }
+    .due { padding:1px 8px; border-radius:999px; border:1px solid var(--line); line-height:20px; }
+    li.overdue .due { background:var(--danger-soft); border-color:transparent; color:var(--danger); font-weight:600; }
+    li.today .due { background:var(--warn-soft); border-color:transparent; color:var(--warn); font-weight:600; }
+    .editor { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .editor[hidden] { display:none; }
+    .editor input[type=text] { flex:1 1 160px; }
+    .editor button, .link { border:1px solid var(--line); background:var(--card); color:var(--text); padding:6px 10px; font-size:14px; }
+    .editor .save { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .actions { display:flex; gap:2px; flex:none; }
+    .actions button { border:0; background:none; padding:4px 8px; font-size:14px; }
+    .edit { color:var(--accent); }
+    .delete { color:var(--danger); }
+    .empty { display:block; padding:24px; text-align:center; color:var(--muted); }
+    .count { color:var(--muted); font-size:14px; margin-top:12px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Todo</h1>
+  <p class="sub">Tasks are saved in your browser (IndexedDB), so they survive a reload.</p>
+  <form id="add-form" class="add-form">
+    <input id="new-title" type="text" placeholder="What needs doing?" aria-label="New task" autocomplete="off" required>
+    <button class="add" type="submit">Add</button>
+    <div class="row">
+      <input id="new-due" type="date" aria-label="Due date (optional)">
+      <input id="new-tags" class="tags-input" type="text" placeholder="Tags, comma separated" aria-label="Tags (optional)" autocomplete="off">
+      <select id="new-repeat" aria-label="Repeat">
+        <option value="">Doesn't repeat</option>
+        <option value="daily">Daily</option>
+        <option value="weekdays">Weekdays</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
+    </div>
+  </form>
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Show tasks">
+      <button type="button" data-status="all">All</button>
+      <button type="button" data-status="active">Active</button>
+      <button type="button" data-status="completed">Completed</button>
+    </div>
+  </div>
+  <div class="tag-filter" id="tag-filter" role="group" aria-label="Filter by tag"></div>
+  <ul id="list" aria-label="Tasks"></ul>
+  <p class="count" id="count"></p>
+</main>
+<script>
+// Client-side database: IndexedDB, one object store "tasks" keyed by auto-increment id.
+// Task: { id, title, done, createdAt, due: "YYYY-MM-DD" | null, tags: string[],
+//         repeat: "daily" | "weekdays" | "weekly" | "monthly" | null, anchorDay, spawned }
+// Tasks saved before these fields existed simply don't have them.
+// Recurring: ticking a repeating task off keeps it in Completed and adds the next copy
+// (once: `spawned` stops a second copy if it's unticked and ticked again).
+const DB_NAME = "todo-app", STORE = "tasks", FILTER_KEY = "todo-filter";
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function tx(db, mode, fn) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(STORE, mode);
+    const result = fn(t.objectStore(STORE));
+    t.oncomplete = () => resolve(result && "result" in result ? result.result : undefined);
+    t.onerror = () => reject(t.error);
+  });
+}
+
+const store = {
+  all: (db) => tx(db, "readonly", (s) => s.getAll()),
+  add: (db, task) => tx(db, "readwrite", (s) => s.add(task)),
+  put: (db, task) => tx(db, "readwrite", (s) => s.put(task)),
+  remove: (db, id) => tx(db, "readwrite", (s) => s.delete(id)),
+};
+
+// Dates are plain "YYYY-MM-DD" strings in local time, so they compare correctly as strings.
+function pad(n) { return String(n).padStart(2, "0"); }
+function fmtDate(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+function parseDate(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
+function todayStr() { return fmtDate(new Date()); }
+function dueLabel(due) {
+  const d = parseDate(due);
+  const opts = { day: "numeric", month: "short" };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString(undefined, opts);
+}
+
+const REPEAT_LABELS = { daily: "Daily", weekdays: "Weekdays", weekly: "Weekly", monthly: "Monthly" };
+
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+
+// One step forward from date d for a repeat rule. Monthly keeps the original day of the
+// month (anchorDay) and uses the month's last day when it's shorter (31 Jan -> 28 Feb -> 31 Mar).
+function stepDate(d, repeat, anchorDay) {
+  if (repeat === "daily") return addDays(d, 1);
+  if (repeat === "weekly") return addDays(d, 7);
+  if (repeat === "weekdays") {
+    let x = addDays(d, 1);
+    while (x.getDay() === 0 || x.getDay() === 6) x = addDays(x, 1);
+    return x;
+  }
+  if (repeat === "monthly") {
+    const y = d.getFullYear(), m = d.getMonth() + 1;
+    const last = new Date(y, m + 1, 0).getDate();
+    return new Date(y, m, Math.min(anchorDay || d.getDate(), last));
+  }
+  return null;
+}
+
+// Next due date after completing a task due on `due`. Missed occurrences are skipped,
+// so a late task produces one next copy (due today at the earliest), never a backlog.
+function nextDue(due, repeat, anchorDay, today = todayStr()) {
+  const limit = parseDate(today);
+  let d = stepDate(parseDate(due || today), repeat, anchorDay);
+  while (d < limit) d = stepDate(d, repeat, anchorDay);
+  return fmtDate(d);
+}
+
+function repeatFields(repeat, due) {
+  if (!repeat) return { repeat: null, anchorDay: null };
+  const start = due || todayStr();
+  return { repeat, due: start, anchorDay: parseDate(start).getDate() };
+}
+
+function parseTags(text) {
+  return [...new Set(String(text || "").split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))];
+}
+
+function byDue(a, b) {
+  if (a.due && b.due && a.due !== b.due) return a.due < b.due ? -1 : 1;
+  if (a.due && !b.due) return -1;
+  if (!a.due && b.due) return 1;
+  return a.createdAt - b.createdAt;
+}
+
+function loadFilter() {
+  try {
+    const f = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");
+    return { status: ["all", "active", "completed"].includes(f.status) ? f.status : "all", tag: f.tag || null };
+  } catch (e) { return { status: "all", tag: null }; }
+}
+function saveFilter() {
+  try { localStorage.setItem(FILTER_KEY, JSON.stringify(filter)); } catch (e) { /* storage unavailable */ }
+}
+
+const list = document.getElementById("list");
+const count = document.getElementById("count");
+const tagFilter = document.getElementById("tag-filter");
+const titleInput = document.getElementById("new-title");
+const dueInput = document.getElementById("new-due");
+const tagsInput = document.getElementById("new-tags");
+const repeatInput = document.getElementById("new-repeat");
+let filter = loadFilter();
+
+function el(tag, props = {}, children = []) {
+  const node = Object.assign(document.createElement(tag), props);
+  for (const c of [].concat(children)) if (c) node.append(c);
+  return node;
+}
+
+function renderTagFilter(allTags) {
+  tagFilter.replaceChildren();
+  if (!allTags.length) return;
+  const make = (label, tag) => {
+    const b = el("button", { type: "button", textContent: label });
+    b.setAttribute("aria-pressed", String(filter.tag === tag));
+    b.addEventListener("click", () => { filter.tag = filter.tag === tag ? null : tag; saveFilter(); refresh(); });
+    return b;
+  };
+  tagFilter.append(make("All tags", null), ...allTags.map((t) => make("#" + t, t)));
+}
+
+function renderTask(db, task, today) {
+  const tags = task.tags || [];
+  const due = task.due || null;
+  const state = !task.done && due ? (due < today ? "overdue" : due === today ? "today" : "") : "";
+  const li = el("li", { className: [task.done ? "done" : "", state].filter(Boolean).join(" ") });
+  li.dataset.id = task.id;
+
+  const box = el("input", { type: "checkbox", checked: task.done });
+  box.setAttribute("aria-label", `Mark "${task.title}" done`);
+  box.addEventListener("change", async () => {
+    const updated = { ...task, done: box.checked };
+    if (box.checked && task.repeat && !task.spawned) {
+      updated.spawned = true;
+      await store.add(db, {
+        title: task.title, done: false, createdAt: Date.now(), tags: tags,
+        due: nextDue(due, task.repeat, task.anchorDay), repeat: task.repeat, anchorDay: task.anchorDay,
+      });
+    }
+    await store.put(db, updated);
+    refresh();
+  });
+
+  const meta = el("div", { className: "meta" });
+  if (due) {
+    const text = state === "overdue" ? `Overdue · ${dueLabel(due)}` : state === "today" ? "Due today" : `Due ${dueLabel(due)}`;
+    meta.append(el("span", { className: "due", textContent: text }));
+  }
+  if (task.repeat) meta.append(el("span", { className: "repeat", textContent: "↻ " + REPEAT_LABELS[task.repeat] }));
+  for (const t of tags) meta.append(el("span", { className: "chip", textContent: "#" + t }));
+
+  const editDue = el("input", { type: "date", value: due || "" });
+  editDue.setAttribute("aria-label", "Due date");
+  const editTags = el("input", { type: "text", value: tags.join(", "), placeholder: "Tags, comma separated" });
+  editTags.setAttribute("aria-label", "Tags");
+  const editRepeat = el("select");
+  editRepeat.setAttribute("aria-label", "Repeat");
+  editRepeat.append(el("option", { value: "", textContent: "Doesn't repeat" }),
+    ...Object.entries(REPEAT_LABELS).map(([value, label]) => el("option", { value, textContent: label })));
+  editRepeat.value = task.repeat || "";
+  const save = el("button", { type: "button", className: "save", textContent: "Save" });
+  const cancel = el("button", { type: "button", textContent: "Cancel" });
+  const editor = el("div", { className: "editor", hidden: true }, [editDue, editTags, editRepeat, save, cancel]);
+  const doSave = async () => {
+    const newDue = editDue.value || null;
+    const rep = editRepeat.value
+      ? (editRepeat.value === task.repeat && newDue === due ? { repeat: task.repeat, anchorDay: task.anchorDay } : repeatFields(editRepeat.value, newDue))
+      : { repeat: null, anchorDay: null };
+    await store.put(db, { ...task, due: newDue, tags: parseTags(editTags.value), ...rep });
+    refresh();
+  };
+  save.addEventListener("click", doSave);
+  cancel.addEventListener("click", () => { editor.hidden = true; });
+  editor.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); doSave(); }
+    if (e.key === "Escape") editor.hidden = true;
+  });
+
+  const edit = el("button", { type: "button", className: "edit", textContent: "Edit" });
+  edit.setAttribute("aria-label", `Edit due date, tags and repeat of "${task.title}"`);
+  edit.addEventListener("click", () => { editor.hidden = !editor.hidden; if (!editor.hidden) editDue.focus(); });
+  const del = el("button", { type: "button", className: "delete", textContent: "Delete" });
+  del.setAttribute("aria-label", `Delete "${task.title}"`);
+  del.addEventListener("click", async () => { await store.remove(db, task.id); refresh(); });
+
+  const body = el("div", { className: "body" }, [el("span", { className: "title", textContent: task.title }), meta, editor]);
+  li.append(box, body, el("div", { className: "actions" }, [edit, del]));
+  return li;
+}
+
+let refresh = () => {};
+
+function render(db, tasks) {
+  const today = todayStr();
+  const allTags = [...new Set(tasks.flatMap((t) => t.tags || []))].sort();
+  if (filter.tag && !allTags.includes(filter.tag)) { filter.tag = null; saveFilter(); }
+
+  for (const b of document.querySelectorAll("[data-status]")) b.setAttribute("aria-pressed", String(b.dataset.status === filter.status));
+  renderTagFilter(allTags);
+
+  const shown = tasks
+    .filter((t) => filter.status === "all" || (filter.status === "active" ? !t.done : t.done))
+    .filter((t) => !filter.tag || (t.tags || []).includes(filter.tag))
+    .sort(byDue);
+
+  list.replaceChildren();
+  if (!shown.length) {
+    list.append(el("li", { className: "empty", textContent: tasks.length ? "No tasks match this filter." : "No tasks yet. Add one above." }));
+  }
+  for (const task of shown) list.append(renderTask(db, task, today));
+
+  const left = tasks.filter((t) => !t.done).length;
+  const filtered = filter.status !== "all" || filter.tag;
+  count.textContent = tasks.length ? `${left} of ${tasks.length} left` + (filtered ? ` · showing ${shown.length}` : "") : "";
+}
+
+openDb().then((db) => {
+  refresh = async () => render(db, await store.all(db));
+  for (const b of document.querySelectorAll("[data-status]")) {
+    b.addEventListener("click", () => { filter.status = b.dataset.status; saveFilter(); refresh(); });
+  }
+  document.getElementById("add-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const title = titleInput.value.trim();
+    if (!title) return;
+    const due = dueInput.value || null;
+    await store.add(db, { title, done: false, createdAt: Date.now(), due, tags: parseTags(tagsInput.value), ...repeatFields(repeatInput.value, due) });
+    titleInput.value = "";
+    dueInput.value = "";
+    tagsInput.value = "";
+    repeatInput.value = "";
+    titleInput.focus();
+    refresh();
+  });
+  refresh();
+}).catch((err) => {
+  list.innerHTML = '<li class="empty">Could not open the browser database.</li>';
+  console.error(err);
+});
+</script>
+</body>
+</html>
