@@ -11,8 +11,7 @@ pushes) as well as answering questions. It **never takes destructive action**.
 
 ## Inputs (all optional)
 
-- **repo**: `owner/name`. Default: `git remote get-url origin`, else
-  `karachiwaladev/contour-jonas-oct-2026-qa-taha-walaqadr`.
+- **repo**: `owner/name` (default: origin, else `karachiwaladev/contour-jonas-oct-2026-qa-taha-walaqadr`).
 - **interval**: `1 min` · **emoji**: 👀 (`eyes`)
 
 ## Pacing
@@ -97,21 +96,22 @@ Wikipedia). Post `<!-- factory:done -->` + `Answer: **…**` + one supporting fa
 3. **Plan.** Comment `<!-- factory:plan -->` with: goal, folder, files to add or change, approach and
    tech, the **acceptance checks** you'll verify in the browser, and what's out of scope. End with
    "Reply **approve** (or 👍 this comment) to start. Reply with changes to revise the plan." Wait.
-4. **Approval.** A member's comment after the plan matching `approve|approved|lgtm|go ahead|ship it`,
-   or a member's 👍 on the plan. Comments containing `<!-- factory:` are the loop's own and never
-   count as answers or approvals. If they ask for changes, post a revised plan and wait again.
-5. **Build.** Implement exactly the approved plan, following `CLAUDE.md` (folder, README, index row).
+4. **Approval.** A member's comment after the plan matching `approve|approved|lgtm|go ahead|ship it`, or
+   their 👍 on it. Comments with `<!-- factory:` are the loop's own and never count. Changes: revise, wait.
+5. **Build** on branch `factory/issue-<N>-<slug>`, from `main`, or **stacked** on the newest open ticket
+   branch that edits the same files (they'd conflict otherwise); its PR then starts "Builds on #P; merge
+   it first". Implement exactly the approved plan, following `CLAUDE.md` (folder, README, index row).
 6. **Verify in a browser:** Chrome DevTools MCP (`.mcp.json`), or Playwright without it; say which.
    - Serve it: `npx -y http-server <folder> -p 8000 & echo $! > /tmp/srv.pid` (or its dev command).
    - Run every acceptance check (fill, click, press keys), confirm it in a fresh snapshot, and reload
      to check that data persists where relevant. No console errors; check a 375×812 mobile layout.
    - Screenshot key states to `<folder>/docs/screenshots/issue-<N>-<step>.png`; **always commit them**.
    - Fix and re-verify until every check passes. Stop the server: `kill $(cat /tmp/srv.pid)`.
-   - **Persona test:** then run the `persona-test` skill on this build with `file: pr`. Fix anything
-     that breaks this ticket's checks; the rest goes in the PR and becomes new tickets.
-7. **Ship.** On branch `factory/issue-<N>-<slug>` from `main`, commit the project and screenshots,
-   push, and open a PR `<summary> (closes #N)`. **Never merge it or close the ticket**: the owner
-   does. Until it's merged, skip the ticket unless a review asks for changes (push fixes there).
+   - **Persona test:** run `persona-test` (`file: pr`, fast runner). Ticket branches can predate it: take its
+     `SKILL.md`, `personas.yaml` and `scripts/` from `main` (`git show main:<path>`) into a temp folder; run
+     from the repo root so it finds `.env`. Fix what breaks this ticket; the rest goes in the PR and new tickets.
+7. **Ship.** Commit the project and screenshots, push the branch, open a PR to `main`: `<summary> (closes #N)`.
+   **Never merge it or close the ticket** (the owner does); until merged, skip it unless a review asks for changes.
 8. **Report.** Always on the ticket, even though the PR will close it: `<!-- factory:done -->` with a
    summary, the PR link, files changed, the commit SHA, the acceptance checks as ✅ lines, how to run
    it, and the screenshots as `![<step>](https://github.com/<R>/blob/<branch>/<path>?raw=true)`.
