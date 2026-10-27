@@ -12,6 +12,8 @@
       :root { --bg:#0f1115; --card:#181b21; --text:#e8eaed; --muted:#9aa0a6; --line:#2a2f37; --accent:#60a5fa; --accent-soft:#1e3a5f; --danger:#f87171; --danger-soft:#3f1d1d; --warn:#fbbf24; --warn-soft:#3b2f12; }
     }
     * { box-sizing: border-box; }
+    :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .seg button:focus-visible { outline-offset:-2px; } /* .seg clips anything outside it */
     body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
     main { max-width:640px; margin:48px auto; padding:0 16px; }
     h1 { font-size:28px; margin:0 0 4px; }
@@ -308,6 +310,7 @@ function renderTask(db, task, today) {
       });
     }
     await store.put(db, updated);
+    keepFocus(li, task.id, "check");
     refresh();
   });
 
@@ -346,13 +349,16 @@ function renderTask(db, task, today) {
       ? (editRepeat.value === task.repeat && newDue === due ? { repeat: task.repeat, anchorDay: task.anchorDay } : repeatFields(editRepeat.value, newDue))
       : { repeat: null, anchorDay: null };
     await store.put(db, { ...task, due: newDue, tags: parseTags(editTags.value), priority: editPriority.value, ...rep });
+    keepFocus(li, task.id, "edit");
     refresh();
   };
+  // Closing the editor hands focus back to its Edit button, not to the now-hidden fields.
+  const closeEditor = () => { editor.hidden = true; edit.focus(); };
   save.addEventListener("click", doSave);
-  cancel.addEventListener("click", () => { editor.hidden = true; });
+  cancel.addEventListener("click", closeEditor);
   editor.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); doSave(); }
-    if (e.key === "Escape") editor.hidden = true;
+    if (e.key === "Escape") closeEditor();
   });
 
   const edit = el("button", { type: "button", className: "edit", textContent: "Edit" });
@@ -360,7 +366,7 @@ function renderTask(db, task, today) {
   edit.addEventListener("click", () => { editor.hidden = !editor.hidden; if (!editor.hidden) editDue.focus(); });
   const del = el("button", { type: "button", className: "delete", textContent: "Delete" });
   del.setAttribute("aria-label", `Delete "${task.title}"`);
-  del.addEventListener("click", async () => { await store.remove(db, task.id); refresh(); });
+  del.addEventListener("click", async () => { await store.remove(db, task.id); keepFocus(li, null, "check"); refresh(); });
 
   const body = el("div", { className: "body" }, [el("span", { className: "title", textContent: task.title }), meta, editor]);
   li.append(box, body, el("div", { className: "actions" }, [edit, del]));
@@ -368,6 +374,32 @@ function renderTask(db, task, today) {
 }
 
 let refresh = () => {};
+
+// The list is rebuilt after every change, which would drop keyboard focus to the page body.
+// Before a rebuild, remember which row (and control) had it; afterwards put it back on the
+// same task, or on the task now in that position (deleted or filtered out), or on the
+// new-task box when the list is empty.
+let pendingFocus = null;
+function keepFocus(li, id, part) {
+  pendingFocus = { id, part, index: [...list.querySelectorAll("li[data-id]")].indexOf(li) };
+}
+// Overlapping actions (fast repeated Space, double Enter) cause several rebuilds; the later ones
+// have no pending request, so they fall back to wherever focus was inside the list just before.
+function focusInList() {
+  const a = document.activeElement, li = a && a.closest && a.closest("#list li[data-id]");
+  if (!li) return null;
+  return { id: li.dataset.id, part: a.classList.contains("edit") ? "edit" : "check", index: [...list.querySelectorAll("li[data-id]")].indexOf(li) };
+}
+function restoreFocus(fallback) {
+  const wanted = pendingFocus || fallback;
+  if (!wanted) return;
+  const { id, part, index } = wanted;
+  pendingFocus = null;
+  const rows = [...list.querySelectorAll("li[data-id]")];
+  const row = rows.find((r) => r.dataset.id === String(id)) || rows[Math.min(Math.max(index, 0), rows.length - 1)];
+  const target = row ? row.querySelector(part === "edit" && row.dataset.id === String(id) ? ".edit" : "input[type=checkbox]") : titleInput;
+  target.focus();
+}
 
 function render(db, tasks) {
   const today = todayStr();
@@ -388,12 +420,14 @@ function render(db, tasks) {
     .filter((t) => matchesSearch(t, words))
     .sort(byDue);
 
+  const hadFocus = focusInList();
   list.replaceChildren();
   if (!shown.length) {
     const why = !tasks.length ? "No tasks yet. Add one above." : words.length ? "No tasks match your search." : "No tasks match this filter.";
     list.append(el("li", { className: "empty", textContent: why }));
   }
   for (const task of shown) list.append(renderTask(db, task, today));
+  restoreFocus(hadFocus);
 
   // Footer: open and done across all tasks, plus how many the current filters show.
   const open = tasks.filter((t) => !t.done).length;
