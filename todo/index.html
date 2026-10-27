@@ -54,7 +54,9 @@
     ul { list-style:none; margin:0; padding:0; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
     li { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-top:1px solid var(--line); }
     li:first-child { border-top:0; }
-    li input[type=checkbox] { width:18px; height:18px; margin-top:3px; accent-color:var(--accent); flex:none; }
+    li input[type=checkbox] { width:22px; height:22px; margin:1px 0 0; accent-color:var(--accent); flex:none; cursor:pointer; }
+    .field { display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:14px; }
+    .field span { font-weight:600; }
     li .body { flex:1; min-width:0; }
     li .title { word-break:break-word; }
     li.done .title { text-decoration:line-through; color:var(--muted); }
@@ -87,11 +89,11 @@
 <body>
 <main>
   <h1>Todo</h1>
-  <p class="sub">Tasks are saved in your browser (IndexedDB), so they survive a reload.</p>
+  <p class="sub">Your tasks are saved on this device.</p>
   <form id="add-form" class="add-form">
     <input id="new-title" type="text" placeholder="What needs doing?" aria-label="New task" autocomplete="off" required>
     <div class="row">
-      <input id="new-due" type="date" aria-label="Due date (optional)">
+      <label class="field"><span>Due</span><input id="new-due" type="date" aria-label="Due date (optional)"></label>
       <input id="new-tags" class="tags-input" type="text" placeholder="Tags, comma separated" aria-label="Tags (optional)" autocomplete="off">
       <select id="new-repeat" aria-label="Repeat">
         <option value="">Doesn't repeat</option>
@@ -129,7 +131,7 @@
       <button type="button" data-due="all">Any date</button>
       <button type="button" data-due="overdue">Overdue</button>
       <button type="button" data-due="today">Today</button>
-      <button type="button" data-due="week">This week</button>
+      <button type="button" data-due="week">Next 7 days</button>
       <button type="button" data-due="none">No date</button>
     </div>
   </div>
@@ -322,7 +324,9 @@ function renderTask(db, task, today) {
   li.dataset.id = task.id;
 
   const box = el("input", { type: "checkbox", checked: task.done });
-  box.setAttribute("aria-label", `Mark "${task.title}" done`);
+  // The name says what ticking will do, matching the tooltip.
+  box.setAttribute("aria-label", task.done ? `Mark "${task.title}" not done` : `Mark "${task.title}" done`);
+  box.title = task.done ? "Mark not done" : "Mark done";
   box.addEventListener("change", async () => {
     const updated = { ...task, done: box.checked };
     if (box.checked && task.repeat && !task.spawned) {
@@ -365,7 +369,8 @@ function renderTask(db, task, today) {
   editPriority.value = priority;
   const save = el("button", { type: "button", className: "save", textContent: "Save" });
   const cancel = el("button", { type: "button", textContent: "Cancel" });
-  const editor = el("div", { className: "editor", hidden: true }, [editDue, editTags, editRepeat, editPriority, save, cancel]);
+  const dueField = el("label", { className: "field" }, [el("span", { textContent: "Due" }), editDue]);
+  const editor = el("div", { className: "editor", hidden: true }, [dueField, editTags, editRepeat, editPriority, save, cancel]);
   const doSave = async () => {
     const newDue = editDue.value || null;
     const rep = editRepeat.value
