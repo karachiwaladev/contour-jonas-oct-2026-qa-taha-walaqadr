@@ -239,6 +239,32 @@ function parseTags(text) {
 }
 
 const PRIORITY_LABELS = { high: "High", medium: "Medium", low: "Low" };
+
+// Saved tasks are trusted only after cleaning: an older version, a corrupted save or anything else
+// on this origin can leave a record with missing or wrong-typed fields, and one such record used
+// to stop the whole list rendering. Cleaning happens on every load and never writes back; the
+// cleaned values are only saved if the user edits or ticks that task.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function cleanTask(raw) {
+  const t = raw && typeof raw === "object" ? raw : {};
+  const title = typeof t.title === "string" ? t.title : t.title == null ? "" : String(t.title);
+  const tags = Array.isArray(t.tags)
+    ? parseTags(t.tags.filter((x) => typeof x === "string" || typeof x === "number").join(","))
+    : typeof t.tags === "string" ? parseTags(t.tags) : [];
+  const due = typeof t.due === "string" && DATE_RE.test(t.due) && !isNaN(parseDate(t.due)) ? t.due : null;
+  const repeat = typeof t.repeat === "string" && Object.hasOwn(REPEAT_LABELS, t.repeat) ? t.repeat : null;
+  const priority = typeof t.priority === "string" && Object.hasOwn(PRIORITY_LABELS, t.priority) ? t.priority : "medium";
+  return {
+    ...t,
+    title: title.trim() ? title : "(untitled)",
+    done: t.done === true,
+    createdAt: Number.isFinite(t.createdAt) ? t.createdAt : 0,
+    due, tags, priority,
+    repeat,
+    anchorDay: Number.isInteger(t.anchorDay) && t.anchorDay >= 1 && t.anchorDay <= 31 ? t.anchorDay : null,
+    spawned: t.spawned === true,
+  };
+}
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
 function priorityOf(task) { return PRIORITY_LABELS[task.priority] ? task.priority : "medium"; }
 
@@ -513,7 +539,7 @@ function render(db, tasks) {
 }
 
 openDb().then((db) => {
-  refresh = async () => render(db, await store.all(db));
+  refresh = async () => render(db, (await store.all(db)).map(cleanTask));
   for (const b of document.querySelectorAll("[data-status]")) {
     b.addEventListener("click", () => { filter.status = b.dataset.status; saveFilter(); refresh(); });
   }
