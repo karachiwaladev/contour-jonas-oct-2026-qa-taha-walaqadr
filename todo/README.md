@@ -11,5 +11,6 @@ A simple todo app. Create a task, mark it done, delete it, and organise tasks wi
 - **Search:** a box above the filters matches as you type, case-insensitive, in titles and tags (`wor` finds `#work`). Several words must all match. It combines with every filter. ✕ or `Esc` clears it, and it starts empty after a reload.
 - **Due-date filter:** Any date · Overdue · Today · Next 7 days (today + 6 days) · No date. It combines with the others and is remembered.
 - **Footer:** shows how many tasks are open and done (`3 open · 5 done`), counting all tasks. With a filter on it adds `showing N`. Hidden when the list is empty.
+- **Limits:** titles up to 200 characters, tags up to 30 characters, 10 tags per task. Anything longer is cut and a notice says so; tasks saved before the limits still show in full until edited.
 - **Storage:** tasks live in the browser's IndexedDB (database `todo-app`, store `tasks`), so they survive a page reload. Tasks from the first version keep working. The last filter is kept in localStorage.
 - **History:** #4 first version · #5 filters, due dates and tags · #7 repeating tasks · #11 priority · #12 count footer · #13 search.

@@ -91,7 +91,7 @@
   <h1>Todo</h1>
   <p class="sub">Your tasks are saved on this device.</p>
   <form id="add-form" class="add-form">
-    <input id="new-title" type="text" placeholder="What needs doing?" aria-label="New task" autocomplete="off" required>
+    <input id="new-title" type="text" placeholder="What needs doing?" aria-label="New task" autocomplete="off" required maxlength="200">
     <div class="row">
       <label class="field"><span>Due</span><input id="new-due" type="date" aria-label="Due date (optional)"></label>
       <input id="new-tags" class="tags-input" type="text" placeholder="Tags, comma separated" aria-label="Tags (optional)" autocomplete="off">
@@ -406,7 +406,9 @@ function renderTask(db, task, today) {
     const rep = editRepeat.value
       ? (editRepeat.value === task.repeat && newDue === due ? { repeat: task.repeat, anchorDay: task.anchorDay } : repeatFields(editRepeat.value, newDue))
       : { repeat: null, anchorDay: null };
-    await store.put(db, { ...task, due: newDue, tags: parseTags(editTags.value), priority: editPriority.value, ...rep });
+    const limited = limitTags(parseTags(editTags.value));
+    await store.put(db, { ...task, due: newDue, tags: limited.tags, priority: editPriority.value, ...rep });
+    if (limited.note) notify(limited.note);
     keepFocus(li, task.id, "edit");
     refresh();
   };
@@ -453,8 +455,28 @@ function armUndoTimer() { clearTimeout(toastTimer); toastTimer = setTimeout(hide
 function offerUndo(task) {
   lastDeleted = task;
   toastBox.hidden = false;
+  document.getElementById("undo").hidden = false;
   document.getElementById("toast-text").textContent = "Task deleted";
   armUndoTimer();
+}
+// The same bar (and live region) for a short notice with no Undo, e.g. "Title cut to 200 characters".
+function notify(text) {
+  hideUndo();
+  toastBox.hidden = false;
+  document.getElementById("undo").hidden = true;
+  document.getElementById("toast-text").textContent = text;
+  armUndoTimer();
+}
+
+// Length limits. Enforced when adding or editing, and always said out loud, never silent.
+// Tasks saved before these limits still show in full until they're next edited.
+const MAX_TITLE = 200, MAX_TAG = 30, MAX_TAGS = 10;
+function limitTags(tags) {
+  const notes = [];
+  let out = tags;
+  if (out.some((t) => t.length > MAX_TAG)) { out = [...new Set(out.map((t) => t.slice(0, MAX_TAG)))]; notes.push(`tags cut to ${MAX_TAG} characters`); }
+  if (out.length > MAX_TAGS) { out = out.slice(0, MAX_TAGS); notes.push(`only the first ${MAX_TAGS} tags were kept`); }
+  return { tags: out, note: notes.length ? notes.join("; ").replace(/^./, (c) => c.toUpperCase()) + "." : "" };
 }
 toastBox.addEventListener("mouseenter", () => clearTimeout(toastTimer));
 toastBox.addEventListener("focusin", () => clearTimeout(toastTimer));
@@ -597,20 +619,25 @@ openDb().then((db) => {
   document.getElementById("add-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     if (adding) return;
-    const title = titleInput.value.trim();
-    if (!title) return;
+    const fullTitle = titleInput.value.trim();
+    if (!fullTitle) return;
     adding = true;
     addButton.disabled = true;
     try {
       const due = dueInput.value || null;
-      await store.add(db, { title, done: false, createdAt: Date.now(), due, tags: parseTags(tagsInput.value),
+      // maxlength stops typing past the limit; this also covers pasted or scripted values.
+      const title = fullTitle.slice(0, MAX_TITLE);
+      const limited = limitTags(parseTags(tagsInput.value));
+      await store.add(db, { title, done: false, createdAt: Date.now(), due, tags: limited.tags,
         priority: priorityInput.value, ...repeatFields(repeatInput.value, due) });
+      const notes = [title !== fullTitle ? `Title cut to ${MAX_TITLE} characters.` : "", limited.note].filter(Boolean);
       titleInput.value = "";
       dueInput.value = "";
       tagsInput.value = "";
       repeatInput.value = "";
       priorityInput.value = "medium";
       hideUndo(); // adding something new ends the chance to undo the last delete
+      if (notes.length) notify(notes.join(" "));
       titleInput.focus();
       await refresh();
     } finally {
