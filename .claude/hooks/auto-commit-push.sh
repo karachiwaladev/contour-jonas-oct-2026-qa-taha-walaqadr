@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stop hook: commit and push whatever changed during the turn, on the ticket branch.
-# main only changes through reviewed PRs, so nothing is auto-committed there.
+# Nothing is auto-committed on main: tickets go through a branch and PR, factory changes by hand.
 # Never forces, never rewrites history, never commits likely secrets. Always exits 0.
 set -u
 cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null || exit 0
