@@ -60,6 +60,8 @@
     .delete { color:var(--danger); }
     .empty { display:block; padding:24px; text-align:center; color:var(--muted); }
     .count { color:var(--muted); font-size:14px; margin-top:12px; }
+    .count[hidden] { display:none; }
+    .count strong { color:var(--text); font-weight:600; }
   </style>
 </head>
 <body>
@@ -101,7 +103,7 @@
   </div>
   <div class="tag-filter" id="tag-filter" role="group" aria-label="Filter by tag"></div>
   <ul id="list" aria-label="Tasks"></ul>
-  <p class="count" id="count"></p>
+  <footer class="count" id="count" aria-live="polite" hidden></footer>
 </main>
 <script>
 // Client-side database: IndexedDB, one object store "tasks" keyed by auto-increment id.
@@ -347,9 +349,13 @@ function render(db, tasks) {
   }
   for (const task of shown) list.append(renderTask(db, task, today));
 
-  const left = tasks.filter((t) => !t.done).length;
+  // Footer: open and done across all tasks, plus how many the current filters show.
+  const open = tasks.filter((t) => !t.done).length;
   const filtered = filter.status !== "all" || filter.tag || filter.priority !== "all";
-  count.textContent = tasks.length ? `${left} of ${tasks.length} left` + (filtered ? ` · showing ${shown.length}` : "") : "";
+  count.hidden = !tasks.length;
+  count.replaceChildren(el("strong", { textContent: String(open) }), " open · ",
+    el("strong", { textContent: String(tasks.length - open) }), " done",
+    filtered ? ` · showing ${shown.length}` : "");
 }
 
 openDb().then((db) => {

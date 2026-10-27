@@ -62,7 +62,7 @@ The loop is `.claude/skills/factory-loop/SKILL.md`; read it for the details.
 
 | Project | Folder | Status | Summary |
 | --- | --- | --- | --- |
-| Todo app | `todo/` | Done (#4, #5, #7, #11) | Tasks with filters, due dates, tags, repeats and priority; stored in IndexedDB. |
+| Todo app | `todo/` | Done (#4–#12) | Tasks with filters, due dates, tags, repeats, priority and counts; stored in IndexedDB. |
 
 ## Ground rules
 
