@@ -368,6 +368,8 @@ function renderTask(db, task, today) {
     }
     await store.put(db, updated);
     keepFocus(li, task.id, "check");
+    // A new repeat copy changes the list, so that still needs a full render.
+    if (!(updated.spawned && !task.spawned) && updateInPlace(db, cleanTask(updated))) return;
     refresh();
   });
 
@@ -407,9 +409,13 @@ function renderTask(db, task, today) {
       ? (editRepeat.value === task.repeat && newDue === due ? { repeat: task.repeat, anchorDay: task.anchorDay } : repeatFields(editRepeat.value, newDue))
       : { repeat: null, anchorDay: null };
     const limited = limitTags(parseTags(editTags.value));
-    await store.put(db, { ...task, due: newDue, tags: limited.tags, priority: editPriority.value, ...rep });
+    const saved = { ...task, due: newDue, tags: limited.tags, priority: editPriority.value, ...rep };
+    await store.put(db, saved);
     if (limited.note) notify(limited.note);
     keepFocus(li, task.id, "edit");
+    // Same sort keys and tags: only this row changes. Otherwise the order or tag chips may move.
+    const sameSpot = saved.due === task.due && priorityOf(saved) === priorityOf(task) && saved.tags.join() === tags.join();
+    if (sameSpot && updateInPlace(db, cleanTask(saved))) return;
     refresh();
   };
   // Closing the editor hands focus back to its Edit button, not to the now-hidden fields.
@@ -430,7 +436,7 @@ function renderTask(db, task, today) {
     await store.remove(db, task.id);
     keepFocus(li, null, "check");
     offerUndo(task);
-    refresh();
+    if (!removeInPlace(task.id)) refresh();
   });
 
   const body = el("div", { className: "body" }, [el("span", { className: "title", textContent: task.title }), meta, editor]);
@@ -524,6 +530,58 @@ function restoreFocus(fallback) {
   target.focus();
 }
 
+function matchesFilters(t, words, today) {
+  return (filter.status === "all" || (filter.status === "active" ? !t.done : t.done))
+    && (!filter.tag || (t.tags || []).includes(filter.tag))
+    && (filter.priority === "all" || priorityOf(t) === filter.priority)
+    && matchesDue(t, filter.due, today)
+    && matchesSearch(t, words);
+}
+
+// Footer: open and done across all tasks, plus how many the current filters show.
+function renderFooter(tasks, shownCount, words) {
+  const open = tasks.filter((t) => !t.done).length;
+  const filtered = filter.status !== "all" || filter.tag || filter.priority !== "all" || filter.due !== "all" || words.length;
+  count.hidden = !tasks.length;
+  count.replaceChildren(el("strong", { textContent: String(open) }), " open · ",
+    el("strong", { textContent: String(tasks.length - open) }), " done",
+    filtered ? ` · showing ${shownCount}` : "");
+}
+
+// What's on screen, so a single change can update one row instead of re-reading and
+// re-rendering every task (ticking one of 5,000 took ~1.4 s that way).
+let current = { tasks: [], shownCount: 0 };
+
+// Replace one task's row in place. Only safe when the task stays visible and in the same spot:
+// the sort uses due date, priority and age, never done state. Returns false if a full render is needed.
+function updateInPlace(db, t) {
+  const today = todayStr(), words = searchWords(query);
+  const i = current.tasks.findIndex((x) => x.id === t.id);
+  const row = list.querySelector(`li[data-id="${t.id}"]`);
+  if (i < 0 || !row || !matchesFilters(t, words, today)) return false;
+  current.tasks[i] = t;
+  row.replaceWith(renderTask(db, t, today));
+  restoreFocus(null);
+  renderFooter(current.tasks, current.shownCount, words);
+  return true;
+}
+
+// Remove one task's row in place, unless that empties the list (the empty message is needed)
+// or removes the last use of a tag (the tag chips change).
+function removeInPlace(id) {
+  const i = current.tasks.findIndex((x) => x.id === id);
+  const row = list.querySelector(`li[data-id="${id}"]`);
+  if (i < 0 || !row || current.shownCount <= 1) return false;
+  const gone = current.tasks[i];
+  const rest = current.tasks.filter((x) => x.id !== id);
+  if ((gone.tags || []).some((tag) => !rest.some((o) => (o.tags || []).includes(tag)))) return false;
+  current = { tasks: rest, shownCount: current.shownCount - 1 };
+  row.remove();
+  restoreFocus(null);
+  renderFooter(current.tasks, current.shownCount, searchWords(query));
+  return true;
+}
+
 function render(db, tasks) {
   const today = todayStr();
   const allTags = [...new Set(tasks.flatMap((t) => t.tags || []))].sort();
@@ -535,13 +593,8 @@ function render(db, tasks) {
   renderTagFilter(allTags);
 
   const words = searchWords(query);
-  const shown = tasks
-    .filter((t) => filter.status === "all" || (filter.status === "active" ? !t.done : t.done))
-    .filter((t) => !filter.tag || (t.tags || []).includes(filter.tag))
-    .filter((t) => filter.priority === "all" || priorityOf(t) === filter.priority)
-    .filter((t) => matchesDue(t, filter.due, today))
-    .filter((t) => matchesSearch(t, words))
-    .sort(byDue);
+  const shown = tasks.filter((t) => matchesFilters(t, words, today)).sort(byDue);
+  current = { tasks, shownCount: shown.length };
 
   const hadFocus = focusInList();
   list.replaceChildren();
@@ -554,14 +607,8 @@ function render(db, tasks) {
   for (const task of shown) list.append(renderTask(db, task, today));
   restoreFocus(hadFocus);
 
-  // Footer: open and done across all tasks, plus how many the current filters show.
-  const open = tasks.filter((t) => !t.done).length;
-  const filtered = filter.status !== "all" || filter.tag || filter.priority !== "all" || filter.due !== "all" || words.length;
   renderActiveFilters(words);
-  count.hidden = !tasks.length;
-  count.replaceChildren(el("strong", { textContent: String(open) }), " open · ",
-    el("strong", { textContent: String(tasks.length - open) }), " done",
-    filtered ? ` · showing ${shown.length}` : "");
+  renderFooter(tasks, shown.length, words);
 }
 
 openDb().then((db) => {
