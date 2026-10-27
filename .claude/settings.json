@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-destructive.py\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-destructive.mjs\"",
             "timeout": 10
           }
         ]
@@ -58,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "in=$(cat); printf '%s' \"$in\" | python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/log-prompts.py\"; bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/auto-commit-push.sh\"",
+            "command": "in=$(cat); printf '%s' \"$in\" | node \"$CLAUDE_PROJECT_DIR/.claude/hooks/log-prompts.mjs\"; bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/auto-commit-push.sh\"",
             "timeout": 90
           }
         ]
