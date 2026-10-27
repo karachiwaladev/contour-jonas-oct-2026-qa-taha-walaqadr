@@ -23,6 +23,7 @@
     .add-form .row { grid-column:1 / -1; display:flex; gap:8px; flex-wrap:wrap; }
     .add-form .row .tags-input { flex:1 1 180px; }
     .add { padding:9px 16px; border:0; background:var(--accent); color:#fff; font-weight:600; }
+    .add:disabled { opacity:.6; cursor:progress; }
     .search { position:relative; margin-bottom:8px; }
     .search input { width:100%; padding-right:40px; }
     .search button { position:absolute; right:4px; top:50%; transform:translateY(-50%); border:0; background:none; color:var(--muted); padding:4px 10px; font-size:16px; }
@@ -418,20 +419,32 @@ openDb().then((db) => {
   searchInput.addEventListener("input", () => setQuery(searchInput.value));
   searchInput.addEventListener("keydown", (e) => { if (e.key === "Escape") setQuery(""); });
   clearSearch.addEventListener("click", () => { setQuery(""); searchInput.focus(); });
+  // A second submit while the first is still saving (double-click, double Enter) is ignored,
+  // so it can't add the same task twice. Same-named tasks added on purpose are still fine.
+  const addButton = document.querySelector(".add");
+  let adding = false;
   document.getElementById("add-form").addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (adding) return;
     const title = titleInput.value.trim();
     if (!title) return;
-    const due = dueInput.value || null;
-    await store.add(db, { title, done: false, createdAt: Date.now(), due, tags: parseTags(tagsInput.value),
-      priority: priorityInput.value, ...repeatFields(repeatInput.value, due) });
-    titleInput.value = "";
-    dueInput.value = "";
-    tagsInput.value = "";
-    repeatInput.value = "";
-    priorityInput.value = "medium";
-    titleInput.focus();
-    refresh();
+    adding = true;
+    addButton.disabled = true;
+    try {
+      const due = dueInput.value || null;
+      await store.add(db, { title, done: false, createdAt: Date.now(), due, tags: parseTags(tagsInput.value),
+        priority: priorityInput.value, ...repeatFields(repeatInput.value, due) });
+      titleInput.value = "";
+      dueInput.value = "";
+      tagsInput.value = "";
+      repeatInput.value = "";
+      priorityInput.value = "medium";
+      titleInput.focus();
+      await refresh();
+    } finally {
+      adding = false;
+      addButton.disabled = false;
+    }
   });
   refresh();
 }).catch((err) => {
