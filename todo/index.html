@@ -39,6 +39,10 @@
     @media (max-width:480px) { .seg button { padding:6px 8px; font-size:13px; } }
     .seg button[aria-pressed=true] { background:var(--accent-soft); color:var(--accent); font-weight:600; }
     .tag-filter { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+    .active-filters { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; padding:8px 12px; border-radius:8px; background:var(--accent-soft); color:var(--text); font-size:14px; }
+    .active-filters[hidden] { display:none; }
+    .active-filters span { flex:1 1 auto; min-width:0; word-break:break-word; }
+    .clear-filters { border:0; background:none; color:var(--accent); font-weight:600; padding:2px 4px; font-size:14px; }
     .tag-filter:empty { display:none; }
     .repeat { padding:1px 8px; border-radius:999px; border:1px solid var(--line); line-height:20px; color:var(--text); }
     .prio { padding:1px 8px; border-radius:999px; line-height:20px; font-weight:600; }
@@ -124,6 +128,10 @@
     </div>
   </div>
   <div class="tag-filter" id="tag-filter" role="group" aria-label="Filter by tag"></div>
+  <div class="active-filters" id="active-filters" hidden>
+    <span id="active-list"></span>
+    <button type="button" class="clear-filters">✕ Clear filters</button>
+  </div>
   <ul id="list" aria-label="Tasks"></ul>
   <footer class="count" id="count" aria-live="polite" hidden></footer>
 </main>
@@ -376,6 +384,21 @@ function renderTask(db, task, today) {
 }
 
 let refresh = () => {};
+let clearFilters = () => {};
+
+// "Showing: Active · High priority · Overdue · #work · "milk"" with a Clear filters button,
+// so a saved filter can't silently hide tasks after a reload.
+const activeBar = document.getElementById("active-filters");
+function renderActiveFilters(words) {
+  const parts = [];
+  if (filter.status !== "all") parts.push(filter.status === "active" ? "Active" : "Completed");
+  if (filter.priority !== "all") parts.push(`${PRIORITY_LABELS[filter.priority]} priority`);
+  if (filter.due !== "all") parts.push(document.querySelector(`[data-due="${filter.due}"]`).textContent);
+  if (filter.tag) parts.push("#" + filter.tag);
+  if (words.length) parts.push(`"${query.trim()}"`);
+  activeBar.hidden = !parts.length;
+  document.getElementById("active-list").textContent = parts.length ? "Showing: " + parts.join(" · ") : "";
+}
 
 // The list is rebuilt after every change, which would drop keyboard focus to the page body.
 // Before a rebuild, remember which row (and control) had it; afterwards put it back on the
@@ -425,7 +448,9 @@ function render(db, tasks) {
   const hadFocus = focusInList();
   list.replaceChildren();
   if (!shown.length) {
-    const why = !tasks.length ? "No tasks yet. Add one above." : words.length ? "No tasks match your search." : "No tasks match this filter.";
+    const why = !tasks.length ? "No tasks yet. Add one above."
+      : words.length ? "No tasks match your search."
+      : "No tasks match these filters. Use Clear filters above to see them all.";
     list.append(el("li", { className: "empty", textContent: why }));
   }
   for (const task of shown) list.append(renderTask(db, task, today));
@@ -434,6 +459,7 @@ function render(db, tasks) {
   // Footer: open and done across all tasks, plus how many the current filters show.
   const open = tasks.filter((t) => !t.done).length;
   const filtered = filter.status !== "all" || filter.tag || filter.priority !== "all" || filter.due !== "all" || words.length;
+  renderActiveFilters(words);
   count.hidden = !tasks.length;
   count.replaceChildren(el("strong", { textContent: String(open) }), " open · ",
     el("strong", { textContent: String(tasks.length - open) }), " done",
@@ -455,6 +481,15 @@ openDb().then((db) => {
   searchInput.addEventListener("input", () => setQuery(searchInput.value));
   searchInput.addEventListener("keydown", (e) => { if (e.key === "Escape") setQuery(""); });
   clearSearch.addEventListener("click", () => { setQuery(""); searchInput.focus(); });
+  // One click back to everything: status, priority, due date, tag and search. The bar then hides,
+  // so focus goes to the search box rather than being lost with the button.
+  clearFilters = () => {
+    filter = { status: "all", tag: null, priority: "all", due: "all" };
+    saveFilter();
+    setQuery("");
+    searchInput.focus();
+  };
+  document.querySelector(".clear-filters").addEventListener("click", clearFilters);
   // A second submit while the first is still saving (double-click, double Enter) is ignored,
   // so it can't add the same task twice. Same-named tasks added on purpose are still fine.
   const addButton = document.querySelector(".add");
