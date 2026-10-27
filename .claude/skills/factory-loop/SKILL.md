@@ -1,6 +1,6 @@
 ---
 name: factory-loop
-description: Run the software-factory ticket loop on a GitHub repo. Answers question tickets; for build/feature tickets asks clarifying questions, gets plan approval, builds on a branch, verifies in a browser with committed screenshots, and opens a PR for the owner to merge. Use for /factory-loop or "run the factory loop".
+description: Run the software-factory ticket loop on a GitHub repo. Answers question tickets; for build/feature tickets asks clarifying questions, gets plan approval, builds on a branch, verifies in a browser with committed screenshots, runs the persona-test skill, and opens a PR for the owner to merge. Use for /factory-loop or "run the factory loop".
 ---
 
 # factory-loop
@@ -21,8 +21,7 @@ pushes) as well as answering questions. It **never takes destructive action**.
   `prompt: "/loop 1 min /factory-loop <repo>"`, `noop: true` if nothing moved).
 - The scheduler rounds up to the next full minute, so "1 min" runs about every 2 minutes. Say so once.
 - Never use CronCreate. On "stop", call `ScheduleWakeup` with `stop: true`.
-- The user wants the loop to run without checking in with them in chat. Questions and plans go
-  **on the ticket**, never in chat.
+- Run without checking in with the user in chat: questions and plans go **on the ticket**, never in chat.
 
 ## Guardrails (always)
 
@@ -87,7 +86,7 @@ reaction picker and the comment box there, and GitHub's web editor (`/new/main?f
 React 👀. Research the answer (WebSearch; if that's disabled, WebFetch on a reliable page such as
 Wikipedia). Post `<!-- factory:done -->` + `Answer: **…**` + one supporting fact + sources. Close.
 
-### Build tickets: questions → plan → approval → build → verify → ship
+### Build tickets: questions → plan → approval → build → verify + persona test → ship
 
 1. **Questions.** React 👀, then comment `<!-- factory:questions -->` with numbered questions. Each
    question includes the default you'll assume, e.g. "1. Storage: IndexedDB in the browser? (default:
@@ -106,9 +105,10 @@ Wikipedia). Post `<!-- factory:done -->` + `Answer: **…**` + one supporting fa
    - Serve it: `npx -y http-server <folder> -p 8000 & echo $! > /tmp/srv.pid` (or its dev command).
    - Run every acceptance check (fill, click, press keys), confirm it in a fresh snapshot, and reload
      to check that data persists where relevant. No console errors; check a 375×812 mobile layout.
-   - Screenshot each key state (empty, in use, done, mobile) to
-     `<folder>/docs/screenshots/issue-<N>-<step>.png`. **Always commit them**, never only upload.
+   - Screenshot key states to `<folder>/docs/screenshots/issue-<N>-<step>.png`; **always commit them**.
    - Fix and re-verify until every check passes. Stop the server: `kill $(cat /tmp/srv.pid)`.
+   - **Persona test:** then run the `persona-test` skill on this build with `file: pr`. Fix anything
+     that breaks this ticket's checks; the rest goes in the PR and becomes new tickets.
 7. **Ship.** On branch `factory/issue-<N>-<slug>` from `main`, commit the project and screenshots,
    push, and open a PR `<summary> (closes #N)`. **Never merge it or close the ticket**: the owner
    does. Until it's merged, skip the ticket unless a review asks for changes (push fixes there).

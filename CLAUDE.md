@@ -30,7 +30,7 @@ README.md                  <- workshop info
 .claude/settings.json      <- deny rules + hooks: block unsafe commands; on stop, log prompts + commit/push
 .claude/hooks/             <- hook scripts
 .claude/prompts.jsonl      <- prompt log, created by the Stop hook on its first run (JSONL)
-.claude/skills/            <- factory skills (the ticket loop: factory-loop/)
+.claude/skills/            <- factory skills: the ticket loop (factory-loop/), persona testing (persona-test/)
 <project-name>/            <- one top-level folder per project (e.g. todo/)
   README.md                <- what the project is, how to run it, status
   CLAUDE.md                <- optional: project-specific agent instructions
@@ -43,7 +43,7 @@ The loop is `.claude/skills/factory-loop/SKILL.md`; read it for the details.
 1. React 👀 on each new open issue.
 2. **Questions:** answer in a comment with sources, then close.
 3. **Build work:** ask clarifying questions on the ticket → post a plan → wait for approval →
-   build on `factory/issue-<N>-<slug>` → verify in a browser → commit screenshots → open a PR
+   build on `factory/issue-<N>-<slug>` → verify in a browser → persona test → open a PR
    `(closes #N)` → report on the ticket. The owner merges, which closes the ticket.
 4. **Never destructive:** no deleting, force-pushing or rewriting history
    (`.claude/hooks/block-destructive.mjs` blocks it). Anything like that goes to a human.
