@@ -75,6 +75,12 @@
     .empty { display:block; padding:24px; text-align:center; color:var(--muted); }
     .count { color:var(--muted); font-size:14px; margin-top:12px; }
     .count[hidden] { display:none; }
+    .toast-box { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); display:flex; align-items:center; gap:14px;
+      max-width:calc(100% - 32px); padding:10px 14px 10px 16px; border-radius:10px; background:var(--text); color:var(--bg);
+      box-shadow:0 6px 24px rgba(0,0,0,.25); font-size:14px; }
+    .toast-box[hidden] { display:none; }
+    main { padding-bottom:80px; } /* room under the footer, so the undo bar never covers it */
+    .toast-box button { border:0; background:none; color:var(--accent-soft); font-weight:700; padding:4px 6px; }
     .count strong { color:var(--text); font-weight:600; }
   </style>
 </head>
@@ -135,6 +141,13 @@
   <ul id="list" aria-label="Tasks"></ul>
   <footer class="count" id="count" aria-live="polite" hidden></footer>
 </main>
+<!-- Stays in the page so screen readers announce what appears inside it. -->
+<div id="toast" role="status" aria-live="polite">
+  <div class="toast-box" hidden>
+    <span id="toast-text"></span>
+    <button type="button" id="undo" aria-keyshortcuts="Control+Z">Undo</button>
+  </div>
+</div>
 <script>
 // Client-side database: IndexedDB, one object store "tasks" keyed by auto-increment id.
 // Task: { id, title, done, createdAt, due: "YYYY-MM-DD" | null, tags: string[],
@@ -376,7 +389,12 @@ function renderTask(db, task, today) {
   edit.addEventListener("click", () => { editor.hidden = !editor.hidden; if (!editor.hidden) editDue.focus(); });
   const del = el("button", { type: "button", className: "delete", textContent: "Delete" });
   del.setAttribute("aria-label", `Delete "${task.title}"`);
-  del.addEventListener("click", async () => { await store.remove(db, task.id); keepFocus(li, null, "check"); refresh(); });
+  del.addEventListener("click", async () => {
+    await store.remove(db, task.id);
+    keepFocus(li, null, "check");
+    offerUndo(task);
+    refresh();
+  });
 
   const body = el("div", { className: "body" }, [el("span", { className: "title", textContent: task.title }), meta, editor]);
   li.append(box, body, el("div", { className: "actions" }, [edit, del]));
@@ -384,6 +402,29 @@ function renderTask(db, task, today) {
 }
 
 let refresh = () => {};
+
+// Undo for Delete: "Task deleted · Undo" for 5 s. Only the latest delete can be undone; adding a
+// task or deleting another replaces it. The timer pauses while the bar is hovered or focused.
+const toastBox = document.querySelector(".toast-box");
+const UNDO_MS = 5000;
+let lastDeleted = null, toastTimer = null, undoDelete = () => {};
+function hideUndo() {
+  clearTimeout(toastTimer);
+  toastBox.hidden = true;
+  document.getElementById("toast-text").textContent = "";
+  lastDeleted = null;
+}
+function armUndoTimer() { clearTimeout(toastTimer); toastTimer = setTimeout(hideUndo, UNDO_MS); }
+function offerUndo(task) {
+  lastDeleted = task;
+  toastBox.hidden = false;
+  document.getElementById("toast-text").textContent = "Task deleted";
+  armUndoTimer();
+}
+toastBox.addEventListener("mouseenter", () => clearTimeout(toastTimer));
+toastBox.addEventListener("focusin", () => clearTimeout(toastTimer));
+toastBox.addEventListener("mouseleave", () => { if (!toastBox.contains(document.activeElement)) armUndoTimer(); });
+toastBox.addEventListener("focusout", (e) => { if (!toastBox.contains(e.relatedTarget)) armUndoTimer(); });
 let clearFilters = () => {};
 
 // "Showing: Active · High priority · Overdue · #work · "milk"" with a Clear filters button,
@@ -490,6 +531,24 @@ openDb().then((db) => {
     searchInput.focus();
   };
   document.querySelector(".clear-filters").addEventListener("click", clearFilters);
+  // Put the deleted task back exactly as it was (same id, fields and done state) and focus it.
+  undoDelete = async () => {
+    const task = lastDeleted;
+    if (!task) return;
+    hideUndo();
+    await store.put(db, task);
+    pendingFocus = { id: task.id, part: "check", index: 0 };
+    refresh();
+  };
+  document.getElementById("undo").addEventListener("click", undoDelete);
+  // Ctrl+Z / Cmd+Z undoes a delete, except while typing, where it keeps its normal text meaning.
+  document.addEventListener("keydown", (e) => {
+    const typing = e.target.matches?.("input[type=text], input[type=search], input[type=date], textarea, select");
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z" && lastDeleted && !typing) {
+      e.preventDefault();
+      undoDelete();
+    }
+  });
   // A second submit while the first is still saving (double-click, double Enter) is ignored,
   // so it can't add the same task twice. Same-named tasks added on purpose are still fine.
   const addButton = document.querySelector(".add");
@@ -516,6 +575,7 @@ openDb().then((db) => {
       tagsInput.value = "";
       repeatInput.value = "";
       priorityInput.value = "medium";
+      hideUndo(); // adding something new ends the chance to undo the last delete
       titleInput.focus();
       await refresh();
     } finally {
